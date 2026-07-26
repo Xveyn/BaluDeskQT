@@ -504,7 +504,73 @@ TEST(AppConfigTest, ClampingIsIdempotent) {
     const AppConfig twice = once.clamped();
     EXPECT_TRUE(once == twice);
 }
+
+TEST(AppConfigTest, ConstantsMatchTheSpecifiedLiterals) {
+    // Verankert die Grenzwerte gegen die Spezifikation. Ohne diesen Test
+    // prüfen alle übrigen nur gegen die Konstanten des Prüflings selbst -
+    // eine falsch gesetzte Konstante bliebe dann unentdeckt.
+    EXPECT_EQ(AppConfig::kMinPollIntervalSeconds, 15);
+    EXPECT_EQ(AppConfig::kMaxPollIntervalSeconds, 3600);
+    EXPECT_EQ(AppConfig::kMinLogMaxFileBytes, std::size_t{65536});
+    EXPECT_EQ(AppConfig::kMaxLogMaxFileBytes, std::size_t{52428800});
+    EXPECT_EQ(AppConfig::kMaxLogFiles, std::size_t{20});
+}
+
+TEST(AppConfigTest, LeavesLowerBoundaryValuesUntouched) {
+    AppConfig config;
+    config.pollIntervalSeconds = 15;
+    config.logMaxFileBytes = std::size_t{65536};
+    config.logMaxFiles = 1;
+
+    const AppConfig result = config.clamped();
+    EXPECT_EQ(result.pollIntervalSeconds, 15);
+    EXPECT_EQ(result.logMaxFileBytes, std::size_t{65536});
+    EXPECT_EQ(result.logMaxFiles, std::size_t{1});
+}
+
+TEST(AppConfigTest, LeavesUpperBoundaryValuesUntouched) {
+    AppConfig config;
+    config.pollIntervalSeconds = 3600;
+    config.logMaxFileBytes = std::size_t{52428800};
+    config.logMaxFiles = 20;
+
+    const AppConfig result = config.clamped();
+    EXPECT_EQ(result.pollIntervalSeconds, 3600);
+    EXPECT_EQ(result.logMaxFileBytes, std::size_t{52428800});
+    EXPECT_EQ(result.logMaxFiles, std::size_t{20});
+}
+
+TEST(AppConfigTest, ClampsJustOutsideTheBoundaries) {
+    AppConfig config;
+
+    config.pollIntervalSeconds = 14;
+    EXPECT_EQ(config.clamped().pollIntervalSeconds, 15);
+
+    config.pollIntervalSeconds = 3601;
+    EXPECT_EQ(config.clamped().pollIntervalSeconds, 3600);
+}
+
+TEST(AppConfigTest, ClampsLogFileSizeAboveMaximum) {
+    AppConfig config;
+    config.logMaxFileBytes = std::size_t{500} * 1024 * 1024;
+    EXPECT_EQ(config.clamped().logMaxFileBytes, std::size_t{52428800});
+}
+
+TEST(AppConfigTest, InequalityIsTheNegationOfEquality) {
+    AppConfig left;
+    AppConfig right;
+    EXPECT_FALSE(left != right);
+
+    right.pollIntervalSeconds = 120;
+    EXPECT_TRUE(left != right);
+}
 ```
+
+Die letzten sechs Tests kamen aus dem Review der ersten Fassung. Sie schließen
+drei Lücken, die eine reine Innen-und-Außen-Prüfung offenlässt: die Grenzwerte
+selbst, die obere Schranke von `logMaxFileBytes`, und vor allem den
+Zirkelschluss — ohne `ConstantsMatchTheSpecifiedLiterals` vergleichen alle
+anderen Tests nur den Prüfling mit sich selbst.
 
 - [ ] **Step 2: `src/core/CMakeLists.txt` anlegen**
 
@@ -665,7 +731,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 7 Tests, alle bestanden.
+Erwartet: 13 Tests, alle bestanden.
 
 - [ ] **Step 9: Die Qt-Freiheit von `core/` im Build absichern**
 
@@ -674,6 +740,16 @@ Ans Ende von `src/core/CMakeLists.txt` anfügen:
 ```cmake
 # Schutz gegen versehentliches Verlinken von Qt. Bricht die Konfiguration ab,
 # sobald jemand ein Qt6::-Ziel an baludesk_core hängt.
+#
+# Zwei Grenzen dieser Prüfung, beide bewusst in Kauf genommen:
+# 1. Sie erfasst nur direkt angehängte Ziele, kein Qt das über eine
+#    Abhängigkeit hereinkäme.
+# 2. Sie läuft an dieser Stelle, also während src/core verarbeitet wird.
+#    Ein target_link_libraries(baludesk_core ... Qt6::...) aus einem später
+#    verarbeiteten Unterverzeichnis — src/app kommt nach src/core — liefe
+#    danach und bliebe unentdeckt.
+# Zusammen mit der Regel "kein find_package(Qt6) in dieser Datei" reicht das
+# für Stufe 0.
 get_target_property(_core_link_libraries baludesk_core LINK_LIBRARIES)
 if(_core_link_libraries MATCHES "Qt6::")
     message(FATAL_ERROR
@@ -690,19 +766,18 @@ cmake --preset msvc2022
 
 Erwartet: `-- Configuring done`, keine Fehlermeldung.
 
-*Grenze dieser Prüfung, bewusst so:* Sie erfasst nur direkt angehängte Ziele,
-kein Qt, das über eine Abhängigkeit hereinkäme. Ein Laufzeitnachweis wäre
-aussagekräftiger, ist hier aber nicht praktikabel — vcpkg kopiert im Triplet
-`x64-windows` die DLLs von gtest, spdlog und fmt neben das Testbinary, ein
-Start aus einem leeren Verzeichnis würde also an diesen scheitern und nicht an
-Qt. Zusammen mit der Regel „kein `find_package(Qt6)` in dieser Datei" reicht
-die Konfigurationsprüfung für Stufe 0.
+*Warum keine Laufzeitprüfung:* Ein Nachweis am fertigen Binary wäre
+aussagekräftiger als die Konfigurationsprüfung, ist hier aber nicht
+praktikabel — vcpkg kopiert im Triplet `x64-windows` die DLLs von gtest,
+spdlog und fmt neben das Testbinary, ein Start aus einem leeren Verzeichnis
+scheiterte also an diesen und nicht an Qt. Die beiden Lücken der
+Konfigurationsprüfung stehen im Kommentar über dem Code.
 
 - [ ] **Step 10: Committen**
 
 ```powershell
 git add src/core tests CMakeLists.txt
-git commit -m "feat(core): AppConfig mit Bereichsprüfung und Qt-freie Testsuite"
+git commit -m "feat(core): AppConfig mit Bereichspruefung und Qt-freie Testsuite"
 ```
 
 ---
@@ -1027,7 +1102,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 12 Tests, alle bestanden.
+Erwartet: 18 Tests, alle bestanden.
 
 - [ ] **Step 8: Committen**
 
@@ -1326,7 +1401,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 16 Tests, alle bestanden.
+Erwartet: 22 Tests, alle bestanden.
 
 - [ ] **Step 8: `src/app/main.cpp` vollständig ersetzen**
 
@@ -1408,7 +1483,7 @@ Abnahmekriterien aus der Spec, Abschnitt 12 Stufe 0 — alle vier müssen zutref
 1. `cmake --preset msvc2022` läuft ohne Fehler durch, vcpkg löst alle fünf Abhängigkeiten auf
 2. `cmake --build --preset debug` erzeugt `baludesk.exe` ohne Warnungen aus eigenem Code
 3. Die .exe startet, zeigt das Fenster und schreibt beim Beenden ein vollständiges Protokoll
-4. `ctest --preset debug` meldet 16 bestandene Tests, 0 fehlgeschlagen
+4. `ctest --preset debug` meldet 22 bestandene Tests, 0 fehlgeschlagen
 
 - [ ] **Step 11: Committen**
 
