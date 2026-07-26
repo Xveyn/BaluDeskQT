@@ -148,11 +148,28 @@ HTTP gleichberechtigt zulassen (Zugangstoken und Dateiinhalte gingen unverschlü
 Netz). HTTP bleibt allein für `localhost` erlaubt, damit Entwicklung gegen eine lokale
 Dev-Instanz möglich bleibt.
 
-Der genaue libcurl-Mechanismus — Anheften des öffentlichen Schlüssels gegenüber Anheften
-des Zertifikats, und wie der Abdruck beim ersten Kontakt überhaupt ausgelesen wird — ist
-beim Umsetzen zu klären und zu belegen, nicht hier vorwegzunehmen.
+**Umgesetzt und belegt in Stufe 1a** (siehe Abschnitt 15): curl spricht OpenSSL mit
+`CURLSSLOPT_NATIVE_CA`, angeheftet wird der öffentliche Schlüssel (`sha256//…` für
+`CURLOPT_PINNEDPUBLICKEY`), und das Zertifikat der Gegenstelle wird über
+`CURLINFO_CERTINFO` ausgelesen. Das Anheften des Schlüssels statt des Zertifikats ist
+Absicht: eine Erneuerung mit gleichem Schlüssel bricht den Pin nicht.
 
-### 2.10 Neues Repository, harter Schnitt
+### 2.10 HTTP-Aufrufe blockieren, ohne Abbruchmöglichkeit
+
+Ein Aufruf blockiert bis zu 30 Sekunden und lässt sich nicht mittendrin abbrechen. Ein
+Abbrechen-Knopf wirkt deshalb *zwischen* zwei Abfragen, nicht innerhalb einer.
+
+Bewusst so entschieden: gegen ein NAS im eigenen Netz antwortet der Server in
+Millisekunden, das Zeitlimit greift praktisch nie. Die Alternative wäre ein
+Fortschritts-Rückruf an `Transport::send`, mit dem sich ein laufender Aufruf abbrechen
+ließe — Aufwand für einen Fall, der im LAN selten eintritt.
+
+**Der Preis ist, dass Nachrüsten teuer wird:** `Transport::send` ist virtuell, ein
+zusätzlicher Parameter bricht die Signatur. Wer das später doch braucht, ändert die
+Schnittstelle und alle Implementierungen. Entschieden am 2026-07-26 im Abschlussreview
+der Stufe 1a.
+
+### 2.11 Neues Repository, harter Schnitt
 
 Eigenes Git-Repo unter `F:\Programme (x86)\BaluDesk QT`. Der Alt-Client bleibt als
 Referenz liegen. Keine Übernahme von Bestandsdaten: Nutzer paaren neu und legen ihre
@@ -536,7 +553,49 @@ acht Pläne zu schreiben, von denen sechs veralten.
 
 ---
 
-## 14. Anhang: Zustand des Alt-Clients
+## 14. Abgenommene Stufen
+
+Was tatsächlich geprüft wurde — nicht was geplant war.
+
+### Stufe 0 — Gerüst (abgenommen 2026-07-26)
+
+25 Tests. Aus gelöschtem Build-Verzeichnis von Null konfiguriert, gebaut, gestartet und
+getestet. Fenster erscheint, Protokoll wird geschrieben und ist byte-geprüft gültiges
+UTF-8. Die Absicherung gegen Qt in `baludesk_core` wurde erst zum Auslösen gebracht
+(probeweise `Qt6::Core` angehängt → `FATAL_ERROR`), bevor sie als wirksam galt.
+
+### Stufe 1a — Transport und Zertifikatsvertrauen (abgenommen 2026-07-26)
+
+60 Tests. Die Vertrauensmechanik aus Abschnitt 2.9 wurde gegen den echten Server und
+gegen öffentliche Testdienste belegt, nicht nur in Unittests behauptet:
+
+| Prüfung | Ergebnis |
+|---|---|
+| Gültiges Zertifikat (`baluhost.duckdns.org`, Let's Encrypt) | verbunden, Status 200 |
+| Name passt nicht (`baluhost.local`, dasselbe Zertifikat) | `CertificateUntrusted`, Fingerabdruck und Pin ausgelesen |
+| Selbstsigniert (`self-signed.badssl.com`) | `CertificateUntrusted`, Fingerabdruck und Pin ausgelesen |
+| Unbekannte Wurzel (`untrusted-root.badssl.com`) | `CertificateUntrusted`, Fingerabdruck und Pin ausgelesen |
+| Mit dem ausgelesenen Pin verbinden | verbunden, Status 200 |
+| Ein Zeichen des Pins verfälscht | `CertificatePinMismatch` — **eigene Fehlerart**, nicht `CertificateUntrusted` |
+
+Die letzte Zeile ist der Kern: nur weil eine Pin-Abweichung von einem unbekannten
+Zertifikat unterscheidbar ist, kann Stufe 1b beim einen nachfragen und beim anderen
+hart abbrechen, wie Abschnitt 2.9 es verlangt.
+
+Zwei Eigenschaften des Entwurfs wurden im Abschlussreview als baulich erzwungen
+bestätigt statt nur beabsichtigt: das Zertifikat der Gegenstelle wird ausschließlich bei
+`CertificateUntrusted` geerntet — im gepinnten Modus kann dieser Fall nicht auftreten,
+eine erneute Nachfrage ist also unmöglich. Und eine Pin-Regel mit *leerem* Pin fällt auf
+volle Prüfung zurück statt auf gar keine.
+
+**Umgebung, die dabei sichtbar wurde:** `baluhost.duckdns.org` löst auch im Heimnetz auf
+die LAN-Adresse auf und liefert dort ein gültiges Zertifikat. Über die IP-Adresse
+antwortet der Server nur über reines HTTP auf Port 8000. Der Client sollte deshalb
+durchgängig über den Namen angesprochen werden — dann gilt Abschnitt 2.9 ohne Ausnahme.
+
+---
+
+## 15. Anhang: Zustand des Alt-Clients
 
 Zur Einordnung, warum neu gebaut wird.
 
