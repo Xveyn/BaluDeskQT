@@ -1323,7 +1323,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 94 Tests, alle bestanden (74 plus deine 20).
+Erwartet: 94 Tests, alle bestanden (74 plus deine 20). (Die Fix-Runde dieses Tasks machte daraus 95 — siehe Ledger.)
 
 - [ ] **Step 9: Committen**
 
@@ -1947,7 +1947,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 107 Tests, alle bestanden (94 plus deine 13).
+Erwartet: 108 Tests, alle bestanden (95 plus deine 13).
 
 - [ ] **Step 10: Committen**
 
@@ -2306,7 +2306,7 @@ ctest --preset debug
 Alle sechs Punkte müssen zutreffen:
 
 1. Konfigurieren und Bauen ohne Fehler und ohne Warnungen aus eigenem Code
-2. `ctest --preset debug` meldet **107 bestandene Tests**, 0 fehlgeschlagen
+2. `ctest --preset debug` meldet **108 bestandene Tests**, 0 fehlgeschlagen
 3. `baludesk_probe pair "http://nas.example.com"` wird abgelehnt, ohne das Netz anzufassen
 4. Eine Paarung gegen `baluhost.duckdns.org` läuft durch und endet mit `Gepaart.`
 5. `baludesk_probe status` im **neuen Prozess** meldet Status 200 — die Sitzung hat den Neustart überlebt
