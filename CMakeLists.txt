@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(BaluDeskQT
     VERSION 0.1.0
-    DESCRIPTION "Desktop-Synchronisationsclient fuer BaluHost NAS"
+    DESCRIPTION "Desktop-Synchronisationsclient für BaluHost NAS"
     LANGUAGES CXX
 )
 

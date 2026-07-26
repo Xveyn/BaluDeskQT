@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "baludesk-qt",
   "version-string": "0.1.0",
-  "description": "Desktop-Synchronisationsclient fuer BaluHost NAS",
+  "description": "Desktop-Synchronisationsclient für BaluHost NAS",
   "dependencies": [
     "curl",
     "sqlite3",

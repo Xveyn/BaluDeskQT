@@ -17,7 +17,7 @@ target_link_libraries(baludesk PRIVATE baludesk_app_lib)
 
 set_target_properties(baludesk PROPERTIES WIN32_EXECUTABLE ON)
 
-# Qt-Laufzeitbibliotheken neben die ausfuehrbare Datei kopieren, damit sie
+# Qt-Laufzeitbibliotheken neben die ausführbare Datei kopieren, damit sie
 # direkt aus dem Build-Verzeichnis startet.
 if(WIN32)
     get_target_property(_qt_core_location Qt6::Core IMPORTED_LOCATION_RELEASE)

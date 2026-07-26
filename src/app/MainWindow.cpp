@@ -10,7 +10,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     resize(900, 600);
 
     auto* placeholder = new QLabel(
-        QStringLiteral("BaluDesk QT — Geruest steht.\nStufe 1 bringt das Geraete-Pairing."),
+        QStringLiteral("BaluDesk QT — Gerüst steht.\nStufe 1 bringt das Geräte-Pairing."),
         this);
     placeholder->setAlignment(Qt::AlignCenter);
     setCentralWidget(placeholder);
