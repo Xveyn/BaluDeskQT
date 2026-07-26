@@ -22,6 +22,8 @@ Diese Vorgaben gelten für jede Aufgabe in diesem Plan.
 - **Namensräume:** `baludesk::core` für alles unter `src/core/`, `baludesk::app` für alles unter `src/app/`
 - **Include-Pfade sind immer vollständig ab `src/`**, also `#include "core/util/Logger.h"`, nie relativ mit `../`
 - **Sprache:** Bezeichner und Dateinamen englisch, Kommentare und Protokolltexte deutsch
+- **Umlaute:** In allen Dateien echte UTF-8-Zeichen (`ü`, `ö`, `ä`, `ß`) — keine Behelfsschreibung wie `ue` oder `ss`. Das gilt für sichtbare Oberflächentexte, Protokolltexte, Kommentare und Dokumentation gleichermaßen. Quelldateien werden als UTF-8 ohne BOM gespeichert; `/utf-8` steht bereits in den Übersetzeroptionen, damit MSVC sie korrekt liest.
+  **Einzige Ausnahme: Git-Commit-Nachrichten bleiben ASCII.** Sie werden unter Windows über PowerShell-5.1-Here-Strings an `git` übergeben, und deren Kodierung verstümmelt Umlaute zuverlässig. Dort also `Geruest` statt `Gerüst`.
 - **Generator:** `Visual Studio 17 2022`, Architektur x64. Bewusst nicht Ninja, weil der VS-Generator MSVC selbst findet und keine `vcvars`-Umgebung braucht.
 - **Warnungen:** `/W4 /permissive- /utf-8` unter MSVC
 - **Nicht in Stufe 0:** Pairing, Sync, Datenbankschema, Infobereichssymbol, Dashboard, Explorer, Installer
@@ -132,7 +134,7 @@ Alle fünf Abhängigkeiten kommen sofort ins Manifest, obwohl Stufe 0 nur spdlog
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "baludesk-qt",
   "version-string": "0.1.0",
-  "description": "Desktop-Synchronisationsclient fuer BaluHost NAS",
+  "description": "Desktop-Synchronisationsclient für BaluHost NAS",
   "dependencies": [
     "curl",
     "sqlite3",
@@ -152,7 +154,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(BaluDeskQT
     VERSION 0.1.0
-    DESCRIPTION "Desktop-Synchronisationsclient fuer BaluHost NAS"
+    DESCRIPTION "Desktop-Synchronisationsclient für BaluHost NAS"
     LANGUAGES CXX
 )
 
@@ -253,7 +255,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     resize(900, 600);
 
     auto* placeholder = new QLabel(
-        QStringLiteral("BaluDesk QT — Geruest steht.\nStufe 1 bringt das Geraete-Pairing."),
+        QStringLiteral("BaluDesk QT — Gerüst steht.\nStufe 1 bringt das Geräte-Pairing."),
         this);
     placeholder->setAlignment(Qt::AlignCenter);
     setCentralWidget(placeholder);
@@ -309,7 +311,7 @@ target_link_libraries(baludesk PRIVATE baludesk_app_lib)
 
 set_target_properties(baludesk PROPERTIES WIN32_EXECUTABLE ON)
 
-# Qt-Laufzeitbibliotheken neben die ausfuehrbare Datei kopieren, damit sie
+# Qt-Laufzeitbibliotheken neben die ausführbare Datei kopieren, damit sie
 # direkt aus dem Build-Verzeichnis startet.
 if(WIN32)
     get_target_property(_qt_core_location Qt6::Core IMPORTED_LOCATION_RELEASE)
@@ -508,7 +510,7 @@ TEST(AppConfigTest, ClampingIsIdempotent) {
 
 ```cmake
 # WICHTIG: Dieses Ziel darf niemals Qt linken.
-# Begruendung in docs/superpowers/specs/2026-07-26-baludesk-qt-design.md, Abschnitt 2.4.
+# Begründung in docs/superpowers/specs/2026-07-26-baludesk-qt-design.md, Abschnitt 2.4.
 # Kein find_package(Qt6) und kein Qt6::-Ziel in dieser Datei.
 
 add_library(baludesk_core STATIC
@@ -573,7 +575,7 @@ namespace baludesk::core {
 
 // Einstellungswerte der Anwendung als schlichte Datenstruktur.
 //
-// Bewusst ohne Qt: der Kern kennt Qt nicht. Die Persistenz uebernimmt
+// Bewusst ohne Qt: der Kern kennt Qt nicht. Die Persistenz übernimmt
 // baludesk::app::SettingsStore, der diese Struktur liest und schreibt.
 struct AppConfig {
     // Abstand zwischen zwei Abfragen entfernter Aenderungen.
@@ -588,8 +590,8 @@ struct AppConfig {
     // Benachrichtigung bei Fehlern und Konflikten.
     bool notifyOnError = true;
 
-    // Benachrichtigung bei abgeschlossenen Sync-Laeufen. Standardmaessig aus,
-    // weil es sonst schnell laestig wird.
+    // Benachrichtigung bei abgeschlossenen Sync-Läufen. Standardmäßig aus,
+    // weil es sonst schnell lästig wird.
     bool notifyOnSyncComplete = false;
 
     // Obergrenze je Protokolldatei in Bytes.
@@ -671,7 +673,7 @@ Ans Ende von `src/core/CMakeLists.txt` anfügen:
 
 ```cmake
 # Schutz gegen versehentliches Verlinken von Qt. Bricht die Konfiguration ab,
-# sobald jemand ein Qt6::-Ziel an baludesk_core haengt.
+# sobald jemand ein Qt6::-Ziel an baludesk_core hängt.
 get_target_property(_core_link_libraries baludesk_core LINK_LIBRARIES)
 if(_core_link_libraries MATCHES "Qt6::")
     message(FATAL_ERROR
@@ -799,11 +801,11 @@ TEST_F(LoggerTest, RotatesAndKeepsFileCountBounded) {
 
     const std::size_t fileCount = countRegularFiles(directory);
 
-    // Untere Schranke: es muss ueberhaupt rotiert worden sein.
+    // Untere Schranke: es muss überhaupt rotiert worden sein.
     EXPECT_GE(fileCount, std::size_t{2}) << "Es wurde nicht rotiert";
 
     // Obere Schranke bewusst als kMaxFiles + 1 formuliert: spdlog haelt die
-    // aktive Datei plus maxFiles rotierte Staende. Der Test prueft, dass die
+    // aktive Datei plus maxFiles rotierte Stände. Der Test prüft, dass die
     // Zahl gedeckelt ist, nicht die genaue Zaehlweise von spdlog.
     EXPECT_LE(fileCount, kMaxFiles + 1) << "Mehr Dateien als die Obergrenze erlaubt";
 }
@@ -835,7 +837,7 @@ Vollständiger neuer Inhalt:
 
 ```cmake
 # WICHTIG: Dieses Ziel darf niemals Qt linken.
-# Begruendung in docs/superpowers/specs/2026-07-26-baludesk-qt-design.md, Abschnitt 2.4.
+# Begründung in docs/superpowers/specs/2026-07-26-baludesk-qt-design.md, Abschnitt 2.4.
 # Kein find_package(Qt6) und kein Qt6::-Ziel in dieser Datei.
 
 find_package(spdlog CONFIG REQUIRED)
@@ -886,7 +888,7 @@ namespace baludesk::core {
 // init() muss einmal beim Programmstart aufgerufen werden, bevor weitere
 // Threads laufen. Weitere Aufrufe von init() sind wirkungslos - der erste
 // gewinnt. Aufrufe vor init() sind erlaubt und verpuffen still, damit ein
-// vergessener Aufruf nicht zum Absturz fuehrt.
+// vergessener Aufruf nicht zum Absturz führt.
 class Logger {
 public:
     static void init(const std::string& logDirectory,
@@ -897,8 +899,8 @@ public:
 
     [[nodiscard]] static bool isInitialized();
 
-    // Vollstaendiger Pfad der aktiven Protokolldatei, leer wenn nicht
-    // initialisiert. Die Trennzeichen sind immer Schraegstriche.
+    // Vollständiger Pfad der aktiven Protokolldatei, leer wenn nicht
+    // initialisiert. Die Trennzeichen sind immer Schrägstriche.
     [[nodiscard]] static std::string logFilePath();
 
     static void flush();
@@ -1011,7 +1013,7 @@ void Logger::flush() {
 
 spdlog::logger* Logger::raw() {
     // Bewusst ohne Sperre: init() laeuft beim Programmstart, bevor weitere
-    // Threads existieren, und danach aendert sich der Zeiger nicht mehr.
+    // Threads existieren, und danach ändert sich der Zeiger nicht mehr.
     return g_logger.get();
 }
 
@@ -1182,9 +1184,9 @@ if(NOT _qt_core_location)
 endif()
 get_filename_component(_qt_bin_dir "${_qt_core_location}" DIRECTORY)
 
-# ENVIRONMENT_MODIFICATION statt ENVIRONMENT: der PATH enthaelt Semikola, und
+# ENVIRONMENT_MODIFICATION statt ENVIRONMENT: der PATH enthält Semikola, und
 # die wuerden in einer ENVIRONMENT-Liste als Trennzeichen zwischen Eintraegen
-# gelesen. path_list_prepend haengt den Qt-Pfad sauber vorne an, ohne den
+# gelesen. path_list_prepend hängt den Qt-Pfad sauber vorne an, ohne den
 # vorhandenen PATH anzufassen.
 gtest_discover_tests(baludesk_app_tests
     DISCOVERY_MODE PRE_TEST
@@ -1237,7 +1239,7 @@ namespace baludesk::app {
 class SettingsStore {
 public:
     // Standardort von QSettings. Verlangt, dass Organisations- und
-    // Anwendungsname vorher ueber QCoreApplication gesetzt wurden.
+    // Anwendungsname vorher über QCoreApplication gesetzt wurden.
     SettingsStore();
 
     // Feste INI-Datei. Wird von den Tests benutzt.
@@ -1369,7 +1371,7 @@ int main(int argc, char* argv[]) {
 
     const int exitCode = application.exec();
 
-    baludesk::core::Logger::info("BaluDesk beendet, Rueckgabewert {}", exitCode);
+    baludesk::core::Logger::info("BaluDesk beendet, Rückgabewert {}", exitCode);
     baludesk::core::Logger::shutdown();
 
     return exitCode;

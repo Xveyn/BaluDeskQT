@@ -102,7 +102,24 @@ vermerkt und beim nächsten Lauf ausgeführt. **Kein Thread wartet je auf einen 
 Preis: eine konfliktbehaftete Datei bleibt unsynchronisiert liegen, bis der Nutzer
 entscheidet. Das ist beabsichtigt — stilles Überschreiben wäre schlimmer.
 
-### 2.8 Neues Repository, harter Schnitt
+### 2.8 Sprache und Umlaute im Quelltext
+
+Bezeichner und Dateinamen englisch, Kommentare und Protokolltexte deutsch.
+
+Umlaute werden als **echte UTF-8-Zeichen** geschrieben (`ü`, `ö`, `ä`, `ß`), nicht in
+Behelfsschreibung wie `ue` oder `ss`. Das gilt für sichtbare Oberflächentexte,
+Protokolltexte, Kommentare und Dokumentation gleichermaßen. Quelldateien werden als
+UTF-8 ohne BOM gespeichert; `/utf-8` gehört zu den Übersetzeroptionen, damit MSVC sie
+richtig liest.
+
+**Einzige Ausnahme: Git-Commit-Nachrichten bleiben ASCII.** Sie werden unter Windows über
+PowerShell-5.1-Here-Strings an `git` übergeben, und deren Kodierung verstümmelt Umlaute
+zuverlässig. Ein `Geruest` in der Commit-Historie ist verschmerzbar, ein `GerÃ¼st` nicht.
+
+Festgelegt am 2026-07-26, nachdem der Platzhaltertext des ersten Fensters sichtbar
+„Geruest steht" statt „Gerüst steht" anzeigte.
+
+### 2.9 Neues Repository, harter Schnitt
 
 Eigenes Git-Repo unter `F:\Programme (x86)\BaluDesk QT`. Der Alt-Client bleibt als
 Referenz liegen. Keine Übernahme von Bestandsdaten: Nutzer paaren neu und legen ihre
