@@ -10,6 +10,8 @@
 #include <memory>
 #include <vector>
 
+#include "core/util/Logger.h"
+
 namespace baludesk::core {
 namespace {
 
@@ -68,6 +70,11 @@ std::optional<CertificateIdentity> identifyCertificate(const std::string& pem) {
 
     X509Ptr certificate(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
     if (!certificate) {
+        // Der Nutzer steht hier vor einer Sicherheitsentscheidung - der Dialog
+        // kann nur "Zertifikat unlesbar" anzeigen, das Protokoll soll deshalb
+        // wenigstens sagen, woran es lag. Nicht den Zertifikatsinhalt selbst
+        // protokollieren.
+        Logger::warn("identifyCertificate: PEM-Zertifikat nicht lesbar (kein gültiges PEM)");
         return std::nullopt;
     }
 

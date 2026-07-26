@@ -3,23 +3,18 @@
 #include <optional>
 #include <string>
 
+#include "core/util/WindowsCredentialStore.h"
+
 namespace baludesk::core {
 
-#ifdef _WIN32
-namespace detail {
-
-// UTF-8 nach UTF-16. Steht sichtbar im Header, damit die Wandlung gegen eine
-// bekannte Bytefolge geprüft werden kann statt nur im Rundlauf durch sich
-// selbst - ein Rundlauf wäre auch mit einer falschen Wandlung grün, solange
-// Schreib- und Lesepfad dieselbe benutzen.
-//
-// Leer, wenn die Eingabe kein gültiges UTF-8 ist.
-[[nodiscard]] std::wstring utf8ToWide(const std::string& utf8);
-
-}  // namespace detail
-#endif
-
 // Ablage für Geheimnisse im Anmeldeinformationsspeicher des Betriebssystems.
+//
+// Statische Fassade über WindowsCredentialStore (core/util/WindowsCredentialStore.h,
+// die konkrete Realisierung der portablen Naht SecretStore aus
+// core/util/SecretStore.h). Bestehende Aufrufer bleiben unverändert bei der
+// statischen API - es gibt aber nur eine Implementierung, diese Klasse ruft
+// sie lediglich auf. Wer polymorph gegen ein Fake testen will (Stufe 1b),
+// greift stattdessen direkt zu SecretStore.
 //
 // Windows: Credential Manager (wincred). Die Linux- und macOS-Zweige folgen,
 // wenn diese Plattformen an der Reihe sind; bis dahin sind die Aufrufe dort

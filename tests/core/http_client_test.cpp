@@ -4,37 +4,18 @@
 
 #include <memory>
 #include <string>
-#include <vector>
+
+#include "core/support/FakeTransport.h"
 
 using baludesk::core::HttpClient;
 using baludesk::core::HttpErrorKind;
 using baludesk::core::HttpMethod;
 using baludesk::core::HttpRequest;
 using baludesk::core::TlsPolicy;
-using baludesk::core::Transport;
 using baludesk::core::TransportResult;
+using baludesk::core::test::FakeTransport;
 
 namespace {
-
-// Merkt sich, womit er aufgerufen wurde, und liefert eine vorgegebene Antwort.
-class FakeTransport : public Transport {
-public:
-    struct Call {
-        std::string url;
-        HttpRequest request;
-        TlsPolicy policy;
-    };
-
-    std::vector<Call> calls;
-    TransportResult nextResult;
-
-    TransportResult send(const std::string& url,
-                         const HttpRequest& request,
-                         const TlsPolicy& policy) override {
-        calls.push_back(Call{url, request, policy});
-        return nextResult;
-    }
-};
 
 TransportResult okWith(long statusCode, std::string body) {
     TransportResult result;
@@ -54,7 +35,7 @@ TlsPolicy systemTrust() {
 
 TEST(HttpClientTest, JoinsBaseUrlAndPathWithASingleSlash) {
     auto transport = std::make_shared<FakeTransport>();
-    transport->nextResult = okWith(200, "{}");
+    transport->queueResult(okWith(200, "{}"));
 
     HttpClient client("https://nas.example.com", transport, systemTrust());
     client.get("/api/health");
@@ -65,7 +46,7 @@ TEST(HttpClientTest, JoinsBaseUrlAndPathWithASingleSlash) {
 
 TEST(HttpClientTest, TolerationOfTrailingAndMissingSlashes) {
     auto transport = std::make_shared<FakeTransport>();
-    transport->nextResult = okWith(200, "{}");
+    transport->queueResult(okWith(200, "{}"));
 
     HttpClient withSlash("https://nas.example.com/", transport, systemTrust());
     withSlash.get("/api/health");
@@ -79,7 +60,7 @@ TEST(HttpClientTest, TolerationOfTrailingAndMissingSlashes) {
 
 TEST(HttpClientTest, PassesTheBearerTokenThrough) {
     auto transport = std::make_shared<FakeTransport>();
-    transport->nextResult = okWith(200, "{}");
+    transport->queueResult(okWith(200, "{}"));
 
     HttpClient client("https://nas.example.com", transport, systemTrust());
     client.get("/api/auth/me", "das-token");
@@ -91,7 +72,7 @@ TEST(HttpClientTest, PassesTheBearerTokenThrough) {
 
 TEST(HttpClientTest, SendsPostBodiesUnchanged) {
     auto transport = std::make_shared<FakeTransport>();
-    transport->nextResult = okWith(201, "{}");
+    transport->queueResult(okWith(201, "{}"));
 
     HttpClient client("https://nas.example.com", transport, systemTrust());
     client.postJson("/api/desktop-pairing/poll", R"({"device_code":"abc"})");
@@ -103,7 +84,7 @@ TEST(HttpClientTest, SendsPostBodiesUnchanged) {
 
 TEST(HttpClientTest, HandsTheTlsPolicyToTheTransport) {
     auto transport = std::make_shared<FakeTransport>();
-    transport->nextResult = okWith(200, "{}");
+    transport->queueResult(okWith(200, "{}"));
 
     TlsPolicy pinned;
     pinned.mode = TlsPolicy::Mode::Pinned;
@@ -119,7 +100,7 @@ TEST(HttpClientTest, HandsTheTlsPolicyToTheTransport) {
 
 TEST(HttpClientTest, AppliesAChangedTlsPolicyToLaterCalls) {
     auto transport = std::make_shared<FakeTransport>();
-    transport->nextResult = okWith(200, "{}");
+    transport->queueResult(okWith(200, "{}"));
 
     HttpClient client("https://nas.example.com", transport, systemTrust());
     client.get("/api/health");
@@ -137,7 +118,7 @@ TEST(HttpClientTest, AppliesAChangedTlsPolicyToLaterCalls) {
 
 TEST(HttpClientTest, TreatsTwoHundredAsSuccess) {
     auto transport = std::make_shared<FakeTransport>();
-    transport->nextResult = okWith(200, R"({"status":"ok"})");
+    transport->queueResult(okWith(200, R"({"status":"ok"})"));
 
     HttpClient client("https://nas.example.com", transport, systemTrust());
     const auto result = client.get("/api/health");
@@ -150,7 +131,7 @@ TEST(HttpClientTest, TreatsTwoHundredAsSuccess) {
 
 TEST(HttpClientTest, DoesNotTreatFourHundredAsSuccess) {
     auto transport = std::make_shared<FakeTransport>();
-    transport->nextResult = okWith(401, R"({"detail":"Not authenticated"})");
+    transport->queueResult(okWith(401, R"({"detail":"Not authenticated"})"));
 
     HttpClient client("https://nas.example.com", transport, systemTrust());
     const auto result = client.get("/api/auth/me");
@@ -168,7 +149,7 @@ TEST(HttpClientTest, CarriesTransportErrorsOutward) {
     failure.error = HttpErrorKind::CertificateUntrusted;
     failure.detail = "self signed certificate";
     failure.peerCertificatePem = "-----BEGIN CERTIFICATE-----\nXYZ\n-----END CERTIFICATE-----\n";
-    transport->nextResult = failure;
+    transport->queueResult(failure);
 
     HttpClient client("https://nas.example.com", transport, systemTrust());
     const auto result = client.get("/api/health");
@@ -186,7 +167,7 @@ TEST(HttpClientTest, ReportsAPinMismatchDistinctly) {
     TransportResult failure;
     failure.error = HttpErrorKind::CertificatePinMismatch;
     failure.detail = "pinned public key mismatch";
-    transport->nextResult = failure;
+    transport->queueResult(failure);
 
     HttpClient client("https://nas.example.com", transport, systemTrust());
     const auto result = client.get("/api/health");
@@ -201,4 +182,27 @@ TEST(HttpClientTest, ExposesItsBaseUrl) {
     auto transport = std::make_shared<FakeTransport>();
     HttpClient client("https://nas.example.com/", transport, systemTrust());
     EXPECT_EQ(client.baseUrl(), "https://nas.example.com");
+}
+
+TEST(HttpClientTest, FakeTransportReturnsQueuedResultsInSequenceThenRepeatsTheLast) {
+    // Belegt die Warteschlange selbst, die Stufe 1b für die Abfrageschleife
+    // beim Pairing braucht - eine Folge wie "pending, pending, approved".
+    auto transport = std::make_shared<FakeTransport>();
+    transport->queueResult(okWith(202, "pending"));
+    transport->queueResult(okWith(202, "pending"));
+    transport->queueResult(okWith(200, "approved"));
+
+    HttpClient client("https://nas.example.com", transport, systemTrust());
+
+    const auto first = client.get("/api/desktop-pairing/poll");
+    const auto second = client.get("/api/desktop-pairing/poll");
+    const auto third = client.get("/api/desktop-pairing/poll");
+    const auto fourth = client.get("/api/desktop-pairing/poll");
+
+    EXPECT_EQ(first.body, "pending");
+    EXPECT_EQ(second.body, "pending");
+    EXPECT_EQ(third.body, "approved");
+    // Warteschlange erschöpft: das letzte Ergebnis wiederholt sich.
+    EXPECT_EQ(fourth.body, "approved");
+    ASSERT_EQ(transport->calls.size(), std::size_t{4});
 }

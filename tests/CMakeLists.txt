@@ -37,6 +37,10 @@ target_compile_definitions(baludesk_core_tests PRIVATE
     BALUDESK_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/core/data"
 )
 
+# Erlaubt Testhilfen wie core/support/FakeTransport.h als vollen Pfad ab
+# tests/ einzubinden - derselben Konvention folgend wie core/api/... ab src/.
+target_include_directories(baludesk_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 target_link_libraries(baludesk_core_tests PRIVATE
     baludesk_core
     GTest::gtest

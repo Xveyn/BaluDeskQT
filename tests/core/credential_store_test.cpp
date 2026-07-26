@@ -4,6 +4,15 @@
 
 #include <string>
 
+#include "core/util/SecretStore.h"
+#include "core/util/WindowsCredentialStore.h"
+
+#ifdef _WIN32
+#include <windows.h>
+
+#include <wincred.h>
+#endif
+
 using baludesk::core::CredentialStore;
 
 namespace {
@@ -98,6 +107,42 @@ TEST_F(CredentialStoreTest, RejectsAnEmptyKey) {
 }
 
 #ifdef _WIN32
+
+TEST_F(CredentialStoreTest, RejectsASecretOneByteOverTheBlobLimit) {
+    // Windows begrenzt CredentialBlob auf CRED_MAX_CREDENTIAL_BLOB_SIZE Bytes.
+    // Ein Byte darüber muss abgelehnt werden, statt CredWriteW mit einem
+    // undurchsichtigen Fehlercode scheitern zu lassen.
+    const std::string secret(static_cast<std::size_t>(CRED_MAX_CREDENTIAL_BLOB_SIZE) + 1, 'x');
+    EXPECT_FALSE(CredentialStore::save(kKeyAscii, secret));
+    EXPECT_FALSE(CredentialStore::contains(kKeyAscii));
+}
+
+TEST_F(CredentialStoreTest, AcceptsASecretExactlyAtTheBlobLimit) {
+    const std::string secret(static_cast<std::size_t>(CRED_MAX_CREDENTIAL_BLOB_SIZE), 'x');
+    ASSERT_TRUE(CredentialStore::save(kKeyAscii, secret));
+
+    const auto loaded = CredentialStore::load(kKeyAscii);
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->size(), secret.size());
+}
+
+TEST_F(CredentialStoreTest, SecretStoreInterfaceWorksPolymorphically) {
+    // Belegt, dass WindowsCredentialStore sich hinter der portablen
+    // SecretStore-Schnittstelle genauso verhält wie hinter der statischen
+    // CredentialStore-Fassade - der eigentliche Nutzen der Naht für Stufe 1b.
+    baludesk::core::WindowsCredentialStore windowsStore;
+    baludesk::core::SecretStore& store = windowsStore;
+
+    ASSERT_TRUE(store.save(kKeyAscii, "polymorph-wert"));
+    EXPECT_TRUE(store.contains(kKeyAscii));
+
+    const auto loaded = store.load(kKeyAscii);
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(*loaded, "polymorph-wert");
+
+    EXPECT_TRUE(store.erase(kKeyAscii));
+    EXPECT_FALSE(store.contains(kKeyAscii));
+}
 
 TEST(CredentialStoreConversionTest, DecodesUtf8InsteadOfWideningBytes) {
     // "grüße" — ü und ß liegen in UTF-8 als Zweibytefolgen vor, die

@@ -18,15 +18,38 @@ add_library(baludesk_core STATIC
     util/Logger.cpp
     util/TlsTrust.cpp
     util/CredentialStore.cpp
+    util/WindowsCredentialStore.cpp
     api/HttpClient.cpp
     api/CurlTransport.cpp
 )
 
 target_include_directories(baludesk_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_link_libraries(baludesk_core PUBLIC
-    spdlog::spdlog
-    OpenSSL::Crypto
-    CURL::libcurl
+
+# spdlog bleibt PUBLIC: Logger.h ist ein öffentlicher Header und bindet
+# spdlog/spdlog.h ein, das braucht also jeder, der baludesk_core linkt.
+# OpenSSL und curl dagegen tauchen in keinem öffentlichen Header auf - nur in
+# .cpp-Dateien -, deshalb PRIVATE: CMakes eigene Sicht auf die
+# Include-Verzeichnisse (INTERFACE_INCLUDE_DIRECTORIES) bleibt damit korrekt
+# auf diese Bibliothek beschränkt, und ein Linker- oder Build-System-Tausch
+# in der Zukunft würde die Trennung respektieren. Bei einer statischen
+# Bibliothek propagiert CMake die Linkabhängigkeit trotzdem über
+# $<LINK_ONLY:> - nur die Include-Pfade hören CMake-seitig auf zu sickern.
+#
+# ACHTUNG, das schließt die Lücke nicht vollständig: vcpkg installiert alle
+# Pakete in EIN gemeinsames <triplet>/include/-Verzeichnis (curl/, openssl/
+# und spdlog/ liegen dort nebeneinander). Weil spdlog::spdlog PUBLIC bleibt,
+# gelangt genau dieses gemeinsame Verzeichnis über spdlog trotzdem in
+# baludesk_app_lib - ein #include <curl/curl.h> unter src/app fände die
+# Header also physisch weiterhin. Geprüft per Testkompilat (siehe
+# Abschlussbericht); eine vollständige physische Trennung bräuchte ein
+# eigenes vcpkg-Overlay oder eine andere Paketquelle je Bibliothek - das
+# sprengt diesen Aufräum-Durchgang.
+target_link_libraries(baludesk_core
+    PUBLIC
+        spdlog::spdlog
+    PRIVATE
+        OpenSSL::Crypto
+        CURL::libcurl
 )
 
 if(WIN32)

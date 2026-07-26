@@ -16,10 +16,17 @@ endif()
 
 enable_testing()
 
+# Erlaubt einem künftigen Packaging-Schritt, das Probe-Werkzeug abzuschalten -
+# es dient der manuellen Abnahme gegen einen echten Server und gehört nicht in
+# jede Auslieferung.
+option(BALUDESK_BUILD_TOOLS "tools/probe mitbauen" ON)
+
 add_subdirectory(src/core)
 add_subdirectory(src/app)
 add_subdirectory(tests)
-add_subdirectory(tools/probe)
+if(BALUDESK_BUILD_TOOLS)
+    add_subdirectory(tools/probe)
+endif()
 
 # Absicherung der Schichtgrenze: baludesk_core darf kein Qt linken
 # (Spec Abschnitt 2.4). Steht bewusst hier und nicht in src/core, weil zu

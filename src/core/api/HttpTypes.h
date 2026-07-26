@@ -38,7 +38,11 @@ enum class HttpErrorKind {
     // zum harten Abbruch (Spec Abschnitt 2.9).
     CertificatePinMismatch,
     Timeout,
-    // Antwort unverständlich, HTTP-Ebene kaputt.
+    // Verbindung oder Antwort aus einem Grund unbrauchbar, der weder das
+    // Netz, ein Zeitlimit noch das Zertifikat der Gegenstelle ist - etwa
+    // eine unverständliche HTTP-Antwort, aber auch nicht eigens abgebildete
+    // TLS-Fehler wie CURLE_SSL_CONNECT_ERROR oder CURLE_SSL_CERTPROBLEM und
+    // ein lokaler Konfigurationsfehler wie CURLE_SSL_CACERT_BADFILE.
     Protocol
 };
 

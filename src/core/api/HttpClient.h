@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "core/api/HttpTypes.h"
@@ -24,6 +25,12 @@ struct HttpResult {
 
 // Setzt Anfragen gegen einen Server zusammen und deutet die Antworten.
 // Kennt weder curl noch Qt.
+//
+// Aus mehreren Threads gefahrlos aufrufbar: get()/postJson() und
+// setTlsPolicy() dürfen gleichzeitig laufen, etwa wenn eine Abfrageschleife
+// abseits des GUI-Threads läuft, während der GUI-Thread nach Bestätigung
+// eines Zertifikats setTlsPolicy() aufruft. Nur die TLS-Regel selbst ist
+// dafür synchronisiert - die Klasse als Ganzes ist es nicht.
 class HttpClient {
 public:
     HttpClient(std::string baseUrl, std::shared_ptr<Transport> transport, TlsPolicy policy);
@@ -37,7 +44,7 @@ public:
     [[nodiscard]] const std::string& baseUrl() const { return baseUrl_; }
 
     // Wird gesetzt, sobald der Nutzer ein Zertifikat bestätigt hat.
-    void setTlsPolicy(TlsPolicy policy) { policy_ = std::move(policy); }
+    void setTlsPolicy(TlsPolicy policy);
 
 private:
     HttpResult send(HttpRequest request);
@@ -45,6 +52,8 @@ private:
 
     std::string baseUrl_;
     std::shared_ptr<Transport> transport_;
+
+    std::mutex policyMutex_;
     TlsPolicy policy_;
 };
 

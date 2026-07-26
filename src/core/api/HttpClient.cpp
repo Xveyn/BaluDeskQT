@@ -33,10 +33,20 @@ std::string HttpClient::urlFor(const std::string& path) const {
     return baseUrl_ + "/" + path;
 }
 
+void HttpClient::setTlsPolicy(TlsPolicy policy) {
+    const std::lock_guard<std::mutex> lock(policyMutex_);
+    policy_ = std::move(policy);
+}
+
 HttpResult HttpClient::send(HttpRequest request) {
     const std::string url = urlFor(request.path);
 
-    const TransportResult transportResult = transport_->send(url, request, policy_);
+    TlsPolicy policy;
+    {
+        const std::lock_guard<std::mutex> lock(policyMutex_);
+        policy = policy_;
+    }
+    const TransportResult transportResult = transport_->send(url, request, policy);
 
     HttpResult result;
     result.error = transportResult.error;
