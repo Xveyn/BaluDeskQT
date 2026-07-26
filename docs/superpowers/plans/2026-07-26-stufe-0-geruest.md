@@ -578,7 +578,7 @@ namespace baludesk::core {
 // Bewusst ohne Qt: der Kern kennt Qt nicht. Die Persistenz übernimmt
 // baludesk::app::SettingsStore, der diese Struktur liest und schreibt.
 struct AppConfig {
-    // Abstand zwischen zwei Abfragen entfernter Aenderungen.
+    // Abstand zwischen zwei Abfragen entfernter Änderungen.
     int pollIntervalSeconds = 60;
 
     // Beim Start direkt in den Infobereich minimieren.
@@ -597,7 +597,7 @@ struct AppConfig {
     // Obergrenze je Protokolldatei in Bytes.
     std::size_t logMaxFileBytes = std::size_t{5} * 1024 * 1024;
 
-    // Anzahl aufbewahrter aelterer Protokolldateien.
+    // Anzahl aufbewahrter älterer Protokolldateien.
     std::size_t logMaxFiles = 3;
 
     static constexpr int kMinPollIntervalSeconds = 15;
@@ -606,7 +606,7 @@ struct AppConfig {
     static constexpr std::size_t kMaxLogMaxFileBytes = std::size_t{50} * 1024 * 1024;
     static constexpr std::size_t kMaxLogFiles = 20;
 
-    // Alle Werte auf ihre gueltigen Bereiche zurechtstutzen.
+    // Alle Werte auf ihre gültigen Bereiche zurechtstutzen.
     // Idempotent: clamped().clamped() == clamped().
     [[nodiscard]] AppConfig clamped() const;
 };
@@ -702,7 +702,7 @@ die Konfigurationsprüfung für Stufe 0.
 
 ```powershell
 git add src/core tests CMakeLists.txt
-git commit -m "feat(core): AppConfig mit Bereichspruefung und Qt-freie Testsuite"
+git commit -m "feat(core): AppConfig mit Bereichsprüfung und Qt-freie Testsuite"
 ```
 
 ---
@@ -804,9 +804,9 @@ TEST_F(LoggerTest, RotatesAndKeepsFileCountBounded) {
     // Untere Schranke: es muss überhaupt rotiert worden sein.
     EXPECT_GE(fileCount, std::size_t{2}) << "Es wurde nicht rotiert";
 
-    // Obere Schranke bewusst als kMaxFiles + 1 formuliert: spdlog haelt die
+    // Obere Schranke bewusst als kMaxFiles + 1 formuliert: spdlog hält die
     // aktive Datei plus maxFiles rotierte Stände. Der Test prüft, dass die
-    // Zahl gedeckelt ist, nicht die genaue Zaehlweise von spdlog.
+    // Zahl gedeckelt ist, nicht die genaue Zählweise von spdlog.
     EXPECT_LE(fileCount, kMaxFiles + 1) << "Mehr Dateien als die Obergrenze erlaubt";
 }
 
@@ -967,7 +967,7 @@ void Logger::init(const std::string& logDirectory,
                   std::size_t maxFiles) {
     std::lock_guard<std::mutex> lock(g_mutex);
 
-    // Der erste Aufruf gewinnt. Ein zweiter wuerde sonst mitten im Betrieb
+    // Der erste Aufruf gewinnt. Ein zweiter würde sonst mitten im Betrieb
     // die Senke unter laufenden Threads austauschen.
     if (g_logger) {
         return;
@@ -1012,7 +1012,7 @@ void Logger::flush() {
 }
 
 spdlog::logger* Logger::raw() {
-    // Bewusst ohne Sperre: init() laeuft beim Programmstart, bevor weitere
+    // Bewusst ohne Sperre: init() läuft beim Programmstart, bevor weitere
     // Threads existieren, und danach ändert sich der Zeiger nicht mehr.
     return g_logger.get();
 }
@@ -1185,7 +1185,7 @@ endif()
 get_filename_component(_qt_bin_dir "${_qt_core_location}" DIRECTORY)
 
 # ENVIRONMENT_MODIFICATION statt ENVIRONMENT: der PATH enthält Semikola, und
-# die wuerden in einer ENVIRONMENT-Liste als Trennzeichen zwischen Eintraegen
+# die würden in einer ENVIRONMENT-Liste als Trennzeichen zwischen Einträgen
 # gelesen. path_list_prepend hängt den Qt-Pfad sauber vorne an, ohne den
 # vorhandenen PATH anzufassen.
 gtest_discover_tests(baludesk_app_tests
@@ -1230,7 +1230,7 @@ Erwartet: FEHLER beim Konfigurieren — `Cannot find source file: SettingsStore.
 
 namespace baludesk::app {
 
-// Persistenz der Einstellungen. Uebersetzt zwischen QSettings und der
+// Persistenz der Einstellungen. Übersetzt zwischen QSettings und der
 // Qt-freien Struktur core::AppConfig.
 //
 // load() liefert immer zurechtgestutzte Werte, save() schreibt immer
