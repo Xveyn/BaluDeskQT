@@ -21,6 +21,7 @@ add_library(baludesk_core STATIC
     util/WindowsCredentialStore.cpp
     api/HttpClient.cpp
     api/CurlTransport.cpp
+    api/ServerUrl.cpp
 )
 
 target_include_directories(baludesk_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
