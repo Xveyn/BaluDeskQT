@@ -1,6 +1,29 @@
 find_package(GTest CONFIG REQUIRED)
 include(GoogleTest)
 
+# Sieht neben dem find_package(Qt6 ...) in src/app/CMakeLists.txt redundant
+# aus, ist es aber nicht: importierte Ziele sind ohne GLOBAL
+# verzeichnisgebunden, und tests/ ist ein Geschwisterverzeichnis von
+# src/app, kein Nachfahre — Qt6::Core ist hier sonst schlicht unsichtbar.
+# Ohne diese Zeile scheitert das get_target_property() weiter unten.
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core)
+
+# Schaltet AUTOMOC für dieses Verzeichnis ein, bevor irgendein Test es
+# braucht. qt_standard_project_setup() wird in src/app/CMakeLists.txt
+# aufgerufen und gilt nur dort; tests/ ist wie oben ein Geschwister- statt
+# ein Nachfahrenverzeichnis.
+#
+# ACHTUNG, die Reihenfolge ist tragend: CMake setzt die AUTOMOC-Eigenschaft
+# eines Ziels aus CMAKE_AUTOMOC in dem Moment, in dem das Ziel entsteht.
+# Steht dieser Aufruf hinter add_executable(), bleibt er wirkungslos — die
+# Ziele sind dann schon ohne AUTOMOC angelegt. Er gehört deshalb vor jedes
+# add_executable() dieser Datei und darf nicht nach unten wandern.
+#
+# Noch deklariert kein Test hier ein Q_OBJECT, aber der erste, der eine
+# Signal-Spy oder ein Fake-QObject braucht, würde sonst nicht verständlich
+# fehlschlagen, sondern mit einem unaufgelösten vtable-Symbol beim Linken.
+qt_standard_project_setup()
+
 # --- Kern-Tests: linken bewusst kein Qt ---------------------------------
 add_executable(baludesk_core_tests
     core/app_config_test.cpp
@@ -25,22 +48,6 @@ target_link_libraries(baludesk_app_tests PRIVATE
     GTest::gtest
     GTest::gtest_main
 )
-
-# Sieht neben dem find_package(Qt6 ...) in src/app/CMakeLists.txt redundant
-# aus, ist es aber nicht: importierte Ziele sind ohne GLOBAL
-# verzeichnisgebunden, und tests/ ist ein Geschwisterverzeichnis von
-# src/app, kein Nachfahre - Qt6::Core ist hier sonst schlicht unsichtbar.
-# Ohne diese Zeile scheitert das get_target_property() weiter unten.
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core)
-
-# Schaltet AUTOMOC für dieses Verzeichnis ein, bevor irgendein Test es
-# braucht: qt_standard_project_setup() wird in src/app/CMakeLists.txt
-# aufgerufen und gilt nur dort, tests/ ist wie oben ein Geschwister- statt
-# ein Nachfahrenverzeichnis. Noch deklariert kein Test hier ein Q_OBJECT,
-# aber der erste, der eine Signal-Spy oder ein Fake-QObject braucht, würde
-# sonst nicht verständlich fehlschlagen, sondern mit einem unaufgelösten
-# vtable-Symbol beim Linken.
-qt_standard_project_setup()
 
 get_target_property(_qt_core_location Qt6::Core IMPORTED_LOCATION_RELEASE)
 if(NOT _qt_core_location)
