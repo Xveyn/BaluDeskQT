@@ -24,6 +24,7 @@ add_library(baludesk_core STATIC
     api/CurlTransport.cpp
     api/ServerUrl.cpp
     auth/PairingClient.cpp
+    auth/FileSessionRepository.cpp
 )
 
 target_include_directories(baludesk_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)

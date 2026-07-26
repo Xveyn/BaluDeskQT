@@ -33,6 +33,7 @@ add_executable(baludesk_core_tests
     core/http_client_test.cpp
     core/server_url_test.cpp
     core/pairing_client_test.cpp
+    core/session_repository_test.cpp
 )
 
 target_compile_definitions(baludesk_core_tests PRIVATE
