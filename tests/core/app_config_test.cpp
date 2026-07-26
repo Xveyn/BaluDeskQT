@@ -60,11 +60,12 @@ TEST(AppConfigTest, ClampingIsIdempotent) {
 
 TEST(AppConfigTest, ConstantsMatchTheSpecifiedLiterals) {
     // Verankert die Grenzwerte gegen die Spezifikation. Ohne diesen Test
-    // pruefen alle uebrigen nur gegen die Konstanten des Pruflings selbst.
+    // prüfen alle übrigen nur gegen die Konstanten des Prüflings selbst.
     EXPECT_EQ(AppConfig::kMinPollIntervalSeconds, 15);
     EXPECT_EQ(AppConfig::kMaxPollIntervalSeconds, 3600);
     EXPECT_EQ(AppConfig::kMinLogMaxFileBytes, std::size_t{65536});
     EXPECT_EQ(AppConfig::kMaxLogMaxFileBytes, std::size_t{52428800});
+    EXPECT_EQ(AppConfig::kMinLogFiles, std::size_t{1});
     EXPECT_EQ(AppConfig::kMaxLogFiles, std::size_t{20});
 }
 
@@ -115,4 +116,53 @@ TEST(AppConfigTest, InequalityIsTheNegationOfEquality) {
 
     right.pollIntervalSeconds = 120;
     EXPECT_TRUE(left != right);
+}
+
+TEST(AppConfigTest, OperatorEqualsComparesEveryField) {
+    // Verändert der Reihe nach genau ein Feld gegenüber einem Standard-
+    // AppConfig und erwartet, dass operator== das jedes Mal erkennt. Ohne
+    // diesen Test könnte ein Feldvergleich aus operator== verschwinden,
+    // ohne dass ein einziger der 23 anderen Tests das bemerkt - genau die
+    // Lücke, die RoundTripsAllValues in settings_store_test.cpp eigentlich
+    // schließen soll. Bewusst ohne clamped(): dieser Test prüft den
+    // Operator, nicht das Zurechtstutzen. Alle Werte liegen trotzdem
+    // innerhalb der gültigen Bereiche, damit clamped() sie unverändert
+    // ließe, falls jemand es hier doch aufriefe.
+    const AppConfig defaults;
+
+    {
+        AppConfig config = defaults;
+        config.pollIntervalSeconds = 120;
+        EXPECT_FALSE(config == defaults);
+    }
+    {
+        AppConfig config = defaults;
+        config.startMinimized = true;
+        EXPECT_FALSE(config == defaults);
+    }
+    {
+        AppConfig config = defaults;
+        config.autostartWithWindows = true;
+        EXPECT_FALSE(config == defaults);
+    }
+    {
+        AppConfig config = defaults;
+        config.notifyOnError = false;
+        EXPECT_FALSE(config == defaults);
+    }
+    {
+        AppConfig config = defaults;
+        config.notifyOnSyncComplete = true;
+        EXPECT_FALSE(config == defaults);
+    }
+    {
+        AppConfig config = defaults;
+        config.logMaxFileBytes = std::size_t{2} * 1024 * 1024;
+        EXPECT_FALSE(config == defaults);
+    }
+    {
+        AppConfig config = defaults;
+        config.logMaxFiles = 5;
+        EXPECT_FALSE(config == defaults);
+    }
 }

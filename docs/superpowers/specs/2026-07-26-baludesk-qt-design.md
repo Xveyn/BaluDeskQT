@@ -195,8 +195,8 @@ Ein Prozess, drei Schichten:
 
 ```
 ┌─────────────────────────────────────────────┐
-│  app/     Qt Widgets — Fenster, Tray,       │  kennt core/ nicht direkt
-│           Dialoge, Models                    │
+│  app/     Qt Widgets — Fenster, Tray,       │  ruft core/ für Werttypen
+│           Dialoge, Models                    │  und Logger direkt auf
 └───────────────────┬─────────────────────────┘
                     │  Signals / Slots
 ┌───────────────────┴─────────────────────────┐
@@ -209,6 +209,12 @@ Ein Prozess, drei Schichten:
 │           reines C++17, statische Bibliothek │
 └─────────────────────────────────────────────┘
 ```
+
+Die `bridge/`-Schicht existiert, um Rückrufe aus `core/`-Arbeiterthreads sicher in den
+Qt-GUI-Thread zu holen und dort als Signale erscheinen zu lassen - nicht, um jeden
+Zugriff von `app/` auf `core/` zu verschleiern. Reine Werttypen wie `AppConfig` und der
+threadsichere, statische `Logger` brauchen keinen Thread-Wechsel und werden deshalb
+direkt aus `app/` verwendet, ohne den Umweg über `bridge/`.
 
 ### 5.1 Verzeichnisstruktur
 

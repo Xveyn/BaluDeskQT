@@ -14,7 +14,7 @@ AppConfig AppConfig::clamped() const {
         std::clamp(result.logMaxFileBytes, kMinLogMaxFileBytes, kMaxLogMaxFileBytes);
 
     result.logMaxFiles =
-        std::clamp(result.logMaxFiles, std::size_t{1}, kMaxLogFiles);
+        std::clamp(result.logMaxFiles, kMinLogFiles, kMaxLogFiles);
 
     return result;
 }

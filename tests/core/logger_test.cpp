@@ -121,3 +121,17 @@ TEST_F(LoggerTest, LoggingSurvivesConcurrentShutdown) {
     EXPECT_TRUE(Logger::isInitialized());
     EXPECT_EQ(Logger::logFilePath(), directory.string() + "/baludesk.log");
 }
+
+TEST_F(LoggerTest, InitWithUnusableDirectoryDoesNotThrow) {
+    // "<" ist unter Windows in Datei- und Verzeichnisnamen unzulässig
+    // (reservierte Zeichen: < > : " / \ | ? *). Das Verzeichnis muss dafür
+    // nicht einmal existieren - schon der Versuch, eine Datei mit diesem
+    // Zeichen im Pfad zu öffnen, scheitert zuverlässig mit
+    // ERROR_INVALID_NAME, unabhängig davon, ob es angelegt werden könnte.
+    const fs::path directory = fs::temp_directory_path() / "baludesk_logger_test_<invalid>";
+
+    EXPECT_NO_THROW(Logger::init(directory.string(), 1024 * 1024, 3));
+
+    EXPECT_FALSE(Logger::isInitialized());
+    EXPECT_TRUE(Logger::logFilePath().empty());
+}

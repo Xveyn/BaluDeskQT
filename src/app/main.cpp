@@ -22,7 +22,12 @@ int main(int argc, char* argv[]) {
     const QString logDirectory =
         QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
         + QStringLiteral("/logs");
-    QDir().mkpath(logDirectory);
+    // Rückgabewert bewusst festgehalten, aber ohne eigene Fehlerbehandlung
+    // in dieser Stufe: Logger::init() fängt ein nicht anlegbares Verzeichnis
+    // selbst sicher ab (siehe Logger.cpp). [[maybe_unused]], weil hier noch
+    // keine Fehler-UI folgt - der Punkt ist nur, nicht länger so zu tun, als
+    // existiere das Verzeichnis, wenn mkpath() das Gegenteil meldet.
+    [[maybe_unused]] const bool logDirectoryReady = QDir().mkpath(logDirectory);
 
     baludesk::core::Logger::init(logDirectory.toStdString(),
                                  config.logMaxFileBytes,

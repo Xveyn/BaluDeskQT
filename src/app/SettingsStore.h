@@ -27,7 +27,7 @@ public:
     void save(const core::AppConfig& config);
 
 private:
-    mutable QSettings settings_;
+    QSettings settings_;
 };
 
 }  // namespace baludesk::app

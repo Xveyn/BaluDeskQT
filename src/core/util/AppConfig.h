@@ -35,6 +35,7 @@ struct AppConfig {
     static constexpr int kMaxPollIntervalSeconds = 3600;
     static constexpr std::size_t kMinLogMaxFileBytes = std::size_t{64} * 1024;
     static constexpr std::size_t kMaxLogMaxFileBytes = std::size_t{50} * 1024 * 1024;
+    static constexpr std::size_t kMinLogFiles = 1;
     static constexpr std::size_t kMaxLogFiles = 20;
 
     // Alle Werte auf ihre gültigen Bereiche zurechtstutzen.

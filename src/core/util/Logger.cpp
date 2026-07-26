@@ -28,15 +28,30 @@ void Logger::init(const std::string& logDirectory,
         return;
     }
 
-    g_logFilePath = logDirectory + "/" + kLogFileName;
+    const std::string logFilePath = logDirectory + "/" + kLogFileName;
 
-    auto sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-        g_logFilePath, maxFileBytes, maxFiles);
+    // Der Konstruktor der Senke wirft spdlog::spdlog_ex, wenn die Datei
+    // nicht angelegt werden kann (Verzeichnis fehlt, Berechtigung fehlt,
+    // Datenträger voll). Logger::init() darf dabei nicht mitreißen - das
+    // widerspräche dem in der Klassenbeschreibung dokumentierten
+    // Versprechen, dass Protokollierung die Anwendung niemals zum Absturz
+    // bringt. g_logFilePath bleibt in diesem Fall leer statt einen Pfad zu
+    // zeigen, unter dem gar keine Datei existiert.
+    try {
+        auto sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+            logFilePath, maxFileBytes, maxFiles);
 
-    g_logger = std::make_shared<spdlog::logger>(kLoggerName, std::move(sink));
-    g_logger->set_level(spdlog::level::debug);
-    g_logger->flush_on(spdlog::level::warn);
-    g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
+        auto logger = std::make_shared<spdlog::logger>(kLoggerName, std::move(sink));
+        logger->set_level(spdlog::level::debug);
+        logger->flush_on(spdlog::level::warn);
+        logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
+
+        g_logger = std::move(logger);
+        g_logFilePath = logFilePath;
+    } catch (const spdlog::spdlog_ex&) {
+        g_logger.reset();
+        g_logFilePath.clear();
+    }
 }
 
 void Logger::shutdown() {
