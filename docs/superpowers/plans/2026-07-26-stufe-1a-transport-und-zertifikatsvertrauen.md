@@ -880,7 +880,7 @@ TEST_F(CredentialStoreTest, OverwritesAnExistingSecret) {
 }
 
 TEST_F(CredentialStoreTest, ErasesASecret) {
-    ASSERT_TRUE(CredentialStore::save(kKeyAscii, "wird-geloescht"));
+    ASSERT_TRUE(CredentialStore::save(kKeyAscii, "wird-gelöscht"));
     ASSERT_TRUE(CredentialStore::erase(kKeyAscii));
 
     EXPECT_FALSE(CredentialStore::contains(kKeyAscii));
