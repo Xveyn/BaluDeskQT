@@ -908,7 +908,12 @@ TEST_F(LoggerTest, LoggingBeforeInitDoesNotCrash) {
 
 - [ ] **Step 2: `src/core/CMakeLists.txt` erweitern**
 
-Vollständiger neuer Inhalt:
+Nur zwei Änderungen am vorhandenen Inhalt — **der Qt-Absicherungsblock aus Task 2
+Step 9 bleibt unangetastet am Dateiende stehen.**
+
+`find_package(spdlog CONFIG REQUIRED)` vor dem `add_library` einfügen,
+`util/Logger.cpp` in die Quelldateiliste aufnehmen und spdlog verknüpfen, sodass
+der obere Teil der Datei so aussieht:
 
 ```cmake
 # WICHTIG: Dieses Ziel darf niemals Qt linken.
@@ -925,6 +930,10 @@ add_library(baludesk_core STATIC
 target_include_directories(baludesk_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(baludesk_core PUBLIC spdlog::spdlog)
 ```
+
+Darunter folgt unverändert der `get_target_property`-Block, der die Konfiguration
+abbricht, sobald ein `Qt6::`-Ziel an `baludesk_core` hängt. Er prüft jetzt eine
+Bibliothek, die spdlog linkt — genau dafür ist er da.
 
 - [ ] **Step 3: `tests/CMakeLists.txt` erweitern**
 
