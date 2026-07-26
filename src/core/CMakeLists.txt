@@ -2,11 +2,15 @@
 # Begründung in docs/superpowers/specs/2026-07-26-baludesk-qt-design.md, Abschnitt 2.4.
 # Kein find_package(Qt6) und kein Qt6::-Ziel in dieser Datei.
 
+find_package(spdlog CONFIG REQUIRED)
+
 add_library(baludesk_core STATIC
     util/AppConfig.cpp
+    util/Logger.cpp
 )
 
 target_include_directories(baludesk_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(baludesk_core PUBLIC spdlog::spdlog)
 
 # Schutz gegen versehentliches Verlinken von Qt. Bricht die Konfiguration ab,
 # sobald jemand ein Qt6::-Ziel an baludesk_core hängt.

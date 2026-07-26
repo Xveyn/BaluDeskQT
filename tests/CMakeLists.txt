@@ -3,6 +3,7 @@ include(GoogleTest)
 
 add_executable(baludesk_core_tests
     core/app_config_test.cpp
+    core/logger_test.cpp
 )
 
 target_link_libraries(baludesk_core_tests PRIVATE
