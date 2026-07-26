@@ -194,7 +194,7 @@ TEST(ServerUrlTest, TrimsSurroundingWhitespace) {
 
 TEST(ServerUrlTest, AddsHttpsWhenNoSchemeIsGiven) {
     // Wer "nas.example.com" eintippt, meint HTTPS. Das stillschweigend zu
-    // ergaenzen ist bequem und sicher - die Gegenrichtung waere es nicht.
+    // ergänzen ist bequem und sicher - die Gegenrichtung wäre es nicht.
     const auto check = checkServerUrl("nas.example.com");
     EXPECT_TRUE(check.ok());
     EXPECT_EQ(check.normalized, "https://nas.example.com");
@@ -214,7 +214,7 @@ TEST(ServerUrlTest, RejectsSchemesOtherThanHttpAndHttps) {
 }
 
 TEST(ServerUrlTest, RejectsPlainHttpToARemoteHost) {
-    // Der Kern der Regel: ueber diese Verbindung geht ein Zugangstoken.
+    // Der Kern der Regel: über diese Verbindung geht ein Zugangstoken.
     const auto check = checkServerUrl("http://nas.example.com");
     EXPECT_FALSE(check.ok());
     EXPECT_EQ(check.problem, ServerUrlProblem::InsecureScheme);
@@ -228,7 +228,7 @@ TEST(ServerUrlTest, RejectsPlainHttpToARemoteIpAddress) {
 
 TEST(ServerUrlTest, AllowsPlainHttpToLocalhost) {
     // Ausnahme laut Spec Abschnitt 2.9, damit Entwicklung gegen eine lokale
-    // Dev-Instanz moeglich bleibt.
+    // Dev-Instanz möglich bleibt.
     EXPECT_TRUE(checkServerUrl("http://localhost:8000").ok());
     EXPECT_TRUE(checkServerUrl("http://127.0.0.1:8000").ok());
     EXPECT_TRUE(checkServerUrl("http://[::1]:8000").ok());
@@ -244,7 +244,7 @@ TEST(ServerUrlTest, DoesNotMistakeALookalikeHostForLocalhost) {
               ServerUrlProblem::InsecureScheme);
     EXPECT_EQ(checkServerUrl("http://notlocalhost").problem,
               ServerUrlProblem::InsecureScheme);
-    // Auch nicht ueber die Benutzerangabe hereinzulegen.
+    // Auch nicht über die Benutzerangabe hereinzulegen.
     EXPECT_EQ(checkServerUrl("http://localhost@evil.example.com").problem,
               ServerUrlProblem::InsecureScheme);
 }
@@ -255,7 +255,7 @@ TEST(ServerUrlTest, RejectsAUrlWithoutAHost) {
 }
 
 TEST(ServerUrlTest, ProducesAMessageForEveryProblem) {
-    // Die Meldung landet spaeter im Dialog. Kein Problem ohne Erklaerung.
+    // Die Meldung landet später im Dialog. Kein Problem ohne Erklärung.
     EXPECT_FALSE(checkServerUrl("").message.empty());
     EXPECT_FALSE(checkServerUrl("https://").message.empty());
     EXPECT_FALSE(checkServerUrl("ftp://x").message.empty());
@@ -306,7 +306,7 @@ enum class ServerUrlProblem {
     Malformed,
     // Etwas anderes als http oder https.
     UnsupportedScheme,
-    // Blankes http zu einem fremden Rechner. Ueber diese Verbindung geht ein
+    // Blankes http zu einem fremden Rechner. Über diese Verbindung geht ein
     // Zugangstoken - siehe Spec Abschnitt 2.9.
     InsecureScheme
 };
@@ -315,24 +315,24 @@ struct ServerUrlCheck {
     ServerUrlProblem problem = ServerUrlProblem::None;
 
     // Bereinigte Fassung: Leerraum entfernt, fehlendes Schema auf https
-    // ergaenzt, abschliessende Schraegstriche entfernt. Nur belegt, wenn die
-    // Pruefung bestanden wurde.
+    // ergänzt, abschliessende Schrägstriche entfernt. Nur belegt, wenn die
+    // Prüfung bestanden wurde.
     std::string normalized;
 
-    // Erklaerung im Klartext, zur Anzeige geeignet. Leer, wenn alles stimmt.
+    // Erklärung im Klartext, zur Anzeige geeignet. Leer, wenn alles stimmt.
     std::string message;
 
     [[nodiscard]] bool ok() const { return problem == ServerUrlProblem::None; }
 };
 
-// Prueft und normalisiert eine eingegebene Serveradresse.
+// Prüft und normalisiert eine eingegebene Serveradresse.
 //
-// Absichtlich hier und nicht im Eingabedialog: die Regel gilt fuer jeden
-// Aufrufer, und der naechste Einstiegspunkt wuerde eine Pruefung im Dialog
+// Absichtlich hier und nicht im Eingabedialog: die Regel gilt für jeden
+// Aufrufer, und der nächste Einstiegspunkt würde eine Prüfung im Dialog
 // umgehen.
 //
-// Fehlt das Schema, wird https ergaenzt. Blankes http ist ausschliesslich zu
-// localhost erlaubt, damit Entwicklung gegen eine lokale Dev-Instanz moeglich
+// Fehlt das Schema, wird https ergänzt. Blankes http ist ausschliesslich zu
+// localhost erlaubt, damit Entwicklung gegen eine lokale Dev-Instanz möglich
 // bleibt.
 [[nodiscard]] ServerUrlCheck checkServerUrl(const std::string& input);
 
@@ -377,13 +377,13 @@ void stripTrailingSlashes(std::string& url) {
     }
 }
 
-// Der Teil zwischen Schema und erstem Schraegstrich, ohne Benutzerangabe und
+// Der Teil zwischen Schema und erstem Schrägstrich, ohne Benutzerangabe und
 // ohne Portnummer. Leer, wenn keiner da ist.
 std::string hostOf(const std::string& urlWithoutScheme) {
     const std::size_t pathStart = urlWithoutScheme.find('/');
     std::string authority = urlWithoutScheme.substr(0, pathStart);
 
-    // Eine Benutzerangabe vor dem @ gehoert nicht zum Rechnernamen. Ohne
+    // Eine Benutzerangabe vor dem @ gehört nicht zum Rechnernamen. Ohne
     // diesen Schnitt liesse sich "http://localhost@fremder.host" als
     // localhost ausgeben.
     const std::size_t at = authority.rfind('@');
@@ -430,7 +430,7 @@ ServerUrlCheck checkServerUrl(const std::string& input) {
     const std::size_t schemeEnd = url.find("://");
     if (schemeEnd == std::string::npos) {
         // Ohne Angabe wird https angenommen. Andersherum - stillschweigend auf
-        // http zurueckfallen - waere gefaehrlich.
+        // http zurückfallen - wäre gefährlich.
         scheme = "https";
         url = "https://" + url;
     } else {
@@ -527,7 +527,7 @@ Erwartet: 74 Tests, alle bestanden (60 vorhandene plus deine 14).
 
 ```powershell
 git add src/core tests/core tests/CMakeLists.txt
-git commit -m "feat(core): ServerUrl-Pruefung und benannte Pin-Erzeugerfunktion"
+git commit -m "feat(core): ServerUrl-Prüfung und benannte Pin-Erzeugerfunktion"
 ```
 
 ---
@@ -663,9 +663,9 @@ TEST(PairingClientTest, BeginSendsTheExpectedRequest) {
     EXPECT_EQ(call.url, "https://nas.example.com/api/desktop-pairing/device-code");
     EXPECT_NE(call.request.jsonBody.find("\"device_id\":\"geraet-1\""), std::string::npos);
     EXPECT_NE(call.request.jsonBody.find("\"device_name\":\"Svens Rechner\""), std::string::npos);
-    // Der Server prueft platform gegen ^(windows|mac|linux)$.
+    // Der Server prüft platform gegen ^(windows|mac|linux)$.
     EXPECT_NE(call.request.jsonBody.find("\"platform\":\"windows\""), std::string::npos);
-    // Pairing laeuft ohne Anmeldung.
+    // Pairing läuft ohne Anmeldung.
     EXPECT_TRUE(call.request.bearerToken.empty());
 }
 
@@ -733,8 +733,8 @@ TEST(PairingClientTest, DoesNotPollAgainAfterApproval) {
     const std::size_t callsAfterApproval = f.transport->calls.size();
     const auto progress = f.client->poll(1010);
 
-    // Der Server loescht den Datensatz bei der Auslieferung. Ein zweiter
-    // Abruf brachte nur ein 404 und wuerde den erreichten Zustand zerstoeren.
+    // Der Server löscht den Datensatz bei der Auslieferung. Ein zweiter
+    // Abruf brachte nur ein 404 und würde den erreichten Zustand zerstören.
     EXPECT_EQ(progress.state, PairingState::Approved);
     EXPECT_EQ(f.transport->calls.size(), callsAfterApproval);
     ASSERT_TRUE(f.client->tokens().has_value());
@@ -784,7 +784,7 @@ TEST(PairingClientTest, TreatsAMissingPairingRecordAsExpired) {
     f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
     f.client->begin("geraet-1", "Rechner", 1000);
 
-    // 404 "Invalid device code" - der Datensatz ist weg. Fuer den Nutzer ist
+    // 404 "Invalid device code" - der Datensatz ist weg. Für den Nutzer ist
     // das dasselbe wie abgelaufen.
     f.transport->queueResult(jsonResult(404, R"({"detail":"Invalid device code"})"));
     const auto progress = f.client->poll(1005);
@@ -801,8 +801,8 @@ TEST(PairingClientTest, BacksOffWhenTheServerReportsTooManyRequests) {
         429, R"({"error":"Too Many Requests","detail":"Rate limit exceeded.","retry_after":37})"));
     const auto progress = f.client->poll(1005);
 
-    // Der Ablauf bricht nicht ab, er wartet laenger - und zwar so lange, wie
-    // der Server im Rumpf angibt. Kopfzeilen traegt HttpResponse nicht.
+    // Der Ablauf bricht nicht ab, er wartet länger - und zwar so lange, wie
+    // der Server im Rumpf angibt. Kopfzeilen trägt HttpResponse nicht.
     EXPECT_EQ(progress.state, PairingState::WaitingForApproval);
     EXPECT_EQ(progress.waitSeconds, 37);
 }
@@ -873,7 +873,7 @@ TEST(PairingClientTest, FailsOnAnApprovalWithoutTokens) {
     f.client->begin("geraet-1", "Rechner", 1000);
 
     // Freigegeben, aber ohne Token - damit ist nichts anzufangen, und weil
-    // der Server den Datensatz geloescht hat, hilft auch kein zweiter Versuch.
+    // der Server den Datensatz gelöscht hat, hilft auch kein zweiter Versuch.
     f.transport->queueResult(jsonResult(200, R"({"status":"approved"})"));
     const auto progress = f.client->poll(1005);
 
