@@ -119,7 +119,40 @@ zuverlässig. Ein `Geruest` in der Commit-Historie ist verschmerzbar, ein `GerÃ
 Festgelegt am 2026-07-26, nachdem der Platzhaltertext des ersten Fensters sichtbar
 „Geruest steht" statt „Gerüst steht" anzeigte.
 
-### 2.9 Neues Repository, harter Schnitt
+### 2.9 TLS: strenge Prüfung mit Vertrauen beim ersten Kontakt
+
+Der Normalfall ist die reguläre Zertifikatsprüfung gegen den System-Zertifikatsspeicher.
+Der Server ist laut Deploy-Verzeichnis auf nginx mit Let's Encrypt ausgelegt; wer so
+betreibt, merkt von dieser Regelung nichts.
+
+Schlägt die Prüfung fehl — selbstsigniertes Zertifikat, Zugriff über LAN-Namen oder
+IP-Adresse, abgelaufenes Zertifikat —, bricht der Client nicht einfach ab. Er zeigt den
+**Fingerabdruck des Zertifikats** an und lässt ihn **einmalig beim Pairing** bestätigen.
+Der bestätigte Abdruck wird gespeichert und ab dann geprüft.
+
+Weicht der Abdruck später ab, ist das ein **harter Fehler**: Verbindung abbrechen,
+Benachrichtigung, keine erneute Nachfrage im laufenden Betrieb. Ein Zertifikatswechsel am
+Server verlangt bewusstes Neupaaren. Genau diese Härte macht das Verfahren erst sicher —
+eine Rückfrage „trotzdem fortfahren?" mitten im Betrieb würde jeden MITM durchwinken.
+
+Der gespeicherte Abdruck gehört zum gepaarten Server, ist kein Geheimnis und liegt
+deshalb bei den Einstellungen, nicht im Credential Manager. Beim Abmelden wird er mit
+gelöscht.
+
+**Einen globalen Schalter „unsichere Verbindungen erlauben" gibt es nicht.** Der Alt-Client
+sah so etwas vor; das ist der Unterschied zwischen „ich vertraue diesem einen Server" und
+„ich prüfe gar nicht mehr".
+
+Verworfen: nur reguläre Prüfung (der Client verbindet sich im Heimnetz dann gar nicht) und
+HTTP gleichberechtigt zulassen (Zugangstoken und Dateiinhalte gingen unverschlüsselt durchs
+Netz). HTTP bleibt allein für `localhost` erlaubt, damit Entwicklung gegen eine lokale
+Dev-Instanz möglich bleibt.
+
+Der genaue libcurl-Mechanismus — Anheften des öffentlichen Schlüssels gegenüber Anheften
+des Zertifikats, und wie der Abdruck beim ersten Kontakt überhaupt ausgelesen wird — ist
+beim Umsetzen zu klären und zu belegen, nicht hier vorwegzunehmen.
+
+### 2.10 Neues Repository, harter Schnitt
 
 Eigenes Git-Repo unter `F:\Programme (x86)\BaluDesk QT`. Der Alt-Client bleibt als
 Referenz liegen. Keine Übernahme von Bestandsdaten: Nutzer paaren neu und legen ihre
