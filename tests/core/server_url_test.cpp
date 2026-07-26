@@ -93,6 +93,45 @@ TEST(ServerUrlTest, RejectsAUrlWithoutAHost) {
     EXPECT_EQ(checkServerUrl("https:///pfad").problem, ServerUrlProblem::Malformed);
 }
 
+TEST(ServerUrlTest, RejectsAnUnterminatedIpv6Bracket) {
+    // "[::1" ohne schliessende Klammer: hostOf() darf hier nicht raten, was
+    // gemeint sein könnte - eine offene Klammer ist kein Rechnername.
+    EXPECT_EQ(checkServerUrl("http://[::1").problem, ServerUrlProblem::Malformed);
+}
+
+TEST(ServerUrlTest, RejectsAHostThatMerelyEndsWithLocalhost) {
+    // "evil.localhost" ist ein fremder Rechner - der Vergleich in
+    // isLocalhost() ist exakt und darf nicht wie ein "endet mit" wirken.
+    EXPECT_EQ(checkServerUrl("http://evil.localhost").problem,
+              ServerUrlProblem::InsecureScheme);
+}
+
+TEST(ServerUrlTest, RejectsAnEmptyScheme) {
+    // "://nas.example.com": das Schema vor "://" ist leer, keins von http
+    // oder https - darf nicht stillschweigend als eines von beiden gelten.
+    EXPECT_EQ(checkServerUrl("://nas.example.com").problem,
+              ServerUrlProblem::UnsupportedScheme);
+}
+
+TEST(ServerUrlTest, RejectsLocalhostWithATrailingDot) {
+    // "localhost." (mit Punkt) ist im DNS die FQDN-Schreibweise derselben
+    // Adresse, aber isLocalhost() vergleicht exakt gegen "localhost" - der
+    // Punkt macht daraus einen anderen, nicht als lokal erkannten String.
+    // Absichtlich streng: eine Aufweichung dieses Vergleichs wäre der
+    // einfachere Weg, versehentlich auch echte Fremdrechner durchzulassen.
+    EXPECT_EQ(checkServerUrl("http://localhost.").problem,
+              ServerUrlProblem::InsecureScheme);
+}
+
+TEST(ServerUrlTest, RejectsAHostHiddenBehindAClosedIpv6Bracket) {
+    // "[::1]evil.com:8000": ohne die Prüfung auf das Zeichen direkt nach der
+    // schliessenden Klammer würde hostOf() nur "[::1]" herauslesen und
+    // "evil.com" stillschweigend verschlucken - localhost träfe zu, obwohl
+    // die Anfrage tatsächlich an einen fremden Rechner ginge.
+    EXPECT_EQ(checkServerUrl("http://[::1]evil.com:8000").problem,
+              ServerUrlProblem::Malformed);
+}
+
 TEST(ServerUrlTest, ProducesAMessageForEveryProblem) {
     // Die Meldung landet später im Dialog. Kein Problem ohne Erklärung.
     EXPECT_FALSE(checkServerUrl("").message.empty());

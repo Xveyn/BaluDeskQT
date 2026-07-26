@@ -2,11 +2,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <utility>
 
+#include "core/api/ServerUrl.h"
 #include "core/util/Logger.h"
 #include "core/util/SecretStore.h"
 
@@ -67,6 +69,21 @@ std::optional<Session> FileSessionRepository::load() {
         return std::nullopt;
     }
 
+    // Auch eine wiedereingelesene Adresse muss durch dieselbe Prüfung wie
+    // jeder andere Aufrufer von checkServerUrl - genau dafür bindet
+    // ServerUrl.h die Funktion für JEDEN Aufrufer, nicht nur den
+    // Eingabedialog. Ohne das könnte eine von Hand bearbeitete oder aus
+    // einer anderen Umgebung kopierte session.json ein "http://" zu einem
+    // fremden Rechner einschleusen - der Bearer-Token ginge dann blank über
+    // diese Verbindung.
+    const auto urlCheck = checkServerUrl(session.serverUrl);
+    if (!urlCheck.ok()) {
+        Logger::warn("Sitzung: abgelegte Serveradresse ist ungültig ({}), wird verworfen",
+                     urlCheck.message);
+        return std::nullopt;
+    }
+    session.serverUrl = urlCheck.normalized;
+
     return session;
 }
 
@@ -112,22 +129,70 @@ bool FileSessionRepository::save(const Session& session) {
         std::filesystem::create_directories(path.parent_path(), error);
     }
 
-    nlohmann::json document;
-    document["server_url"] = session.serverUrl;
-    document["username"] = session.username;
-    document["public_key_pin"] = session.publicKeyPin;
+    // Erst als Text im Speicher aufbauen und in eine Nachbardatei schreiben,
+    // dann per rename() über das Ziel legen. Ein std::ofstream mit
+    // std::ios::trunc direkt auf jsonPath_ würde die bestehende Datei schon
+    // beim Öffnen zerstören - schlägt der Schreibvorgang danach fehl, wäre
+    // eine intakte Sitzung trotz Rückbau der Geheimnisse futsch, weil load()
+    // die abgeschnittene Datei verwirft. Bis der rename() glückt, bleibt
+    // jsonPath_ unangetastet.
+    const std::filesystem::path tempPath = jsonPath_ + ".tmp";
 
-    std::ofstream stream(jsonPath_, std::ios::binary | std::ios::trunc);
-    if (!stream.good()) {
-        Logger::error("Sitzung: Ablagedatei konnte nicht geschrieben werden");
+    std::string serialized;
+    try {
+        nlohmann::json document;
+        document["server_url"] = session.serverUrl;
+        document["username"] = session.username;
+        document["public_key_pin"] = session.publicKeyPin;
+        // error_handler_t::replace statt des Standards (strict): ungültiges
+        // UTF-8 wird ersetzt statt eine Ausnahme zu werfen. An dieser Stelle
+        // sind die Geheimnisse bereits abgelegt - eine hier durchschlagende
+        // Ausnahme wäre genau der halb abgelegte Zustand, den
+        // SessionRepository.h ausschließt, und ein Absturz statt eines
+        // false-Rückgabewerts widerspräche dem dokumentierten Vertrag.
+        serialized = document.dump(2, ' ', false, nlohmann::json::error_handler_t::replace);
+    } catch (const std::exception& ex) {
+        Logger::error("Sitzung: Ablagedatei konnte nicht aufgebaut werden — {}", ex.what());
         rollbackSecrets();
         return false;
     }
-    stream << document.dump(2);
-    stream.close();
 
-    if (!stream.good()) {
-        Logger::error("Sitzung: Ablagedatei konnte nicht vollständig geschrieben werden");
+    try {
+        std::ofstream stream(tempPath, std::ios::binary | std::ios::trunc);
+        if (!stream.good()) {
+            Logger::error("Sitzung: temporäre Ablagedatei konnte nicht geschrieben werden");
+            std::error_code removeError;
+            std::filesystem::remove(tempPath, removeError);
+            rollbackSecrets();
+            return false;
+        }
+        stream << serialized;
+        stream.close();
+
+        if (!stream.good()) {
+            Logger::error("Sitzung: temporäre Ablagedatei konnte nicht vollständig geschrieben "
+                          "werden");
+            std::error_code removeError;
+            std::filesystem::remove(tempPath, removeError);
+            rollbackSecrets();
+            return false;
+        }
+    } catch (const std::exception& ex) {
+        Logger::error("Sitzung: Schreiben der temporären Ablagedatei ist fehlgeschlagen — {}",
+                      ex.what());
+        std::error_code removeError;
+        std::filesystem::remove(tempPath, removeError);
+        rollbackSecrets();
+        return false;
+    }
+
+    std::error_code renameError;
+    std::filesystem::rename(tempPath, path, renameError);
+    if (renameError) {
+        Logger::error("Sitzung: Ablagedatei konnte nicht ersetzt werden — {}",
+                      renameError.message());
+        std::error_code removeError;
+        std::filesystem::remove(tempPath, removeError);
         rollbackSecrets();
         return false;
     }

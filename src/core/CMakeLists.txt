@@ -25,6 +25,7 @@ add_library(baludesk_core STATIC
     api/ServerUrl.cpp
     auth/PairingClient.cpp
     auth/FileSessionRepository.cpp
+    auth/SessionPaths.cpp
 )
 
 target_include_directories(baludesk_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)

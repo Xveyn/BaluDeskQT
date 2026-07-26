@@ -53,6 +53,16 @@ std::string hostOf(const std::string& urlWithoutScheme) {
         if (close == std::string::npos) {
             return {};
         }
+        // Nach der schliessenden Klammer darf nur ein Doppelpunkt (Port)
+        // folgen oder gar nichts mehr - der Pfad ist an dieser Stelle schon
+        // abgeschnitten. Sonst liesse sich mit "[::1]evil.com:8000" ein
+        // fremder Rechner hinter einer scheinbaren localhost-Adresse
+        // verstecken. Eine aktuelle libcurl lehnt diese Form heute selbst
+        // ab, aber diese Funktion ist laut ServerUrl.h die Grenze für jeden
+        // Aufrufer und darf sich darauf nicht verlassen.
+        if (close + 1 < authority.size() && authority[close + 1] != ':') {
+            return {};
+        }
         return authority.substr(0, close + 1);
     }
 

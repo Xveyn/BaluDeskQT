@@ -322,6 +322,83 @@ TEST(PairingClientTest, PollBeforeBeginIsRefusedWithoutTouchingTheNetwork) {
     EXPECT_TRUE(f.transport->calls.empty());
 }
 
+TEST(PairingClientTest, DrivesAGenuineMultiStepPollSequence) {
+    Fixture f;
+    // Die Reihenfolge zählt: begin() verbraucht bereits den ersten Eintrag
+    // der Warteschlange (die Gerätecode-Antwort), die drei poll()-Aufrufe
+    // danach die restlichen drei - authorization_pending, noch einmal
+    // authorization_pending, dann approved.
+    f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
+    f.transport->queueResult(jsonResult(200, kPendingResponse));
+    f.transport->queueResult(jsonResult(200, kPendingResponse));
+    f.transport->queueResult(jsonResult(200, kApprovedResponse));
+
+    const auto begun = f.client->begin("geraet-1", "Rechner", 1000);
+    EXPECT_EQ(begun.state, PairingState::WaitingForApproval);
+
+    const auto first = f.client->poll(1005);
+    EXPECT_EQ(first.state, PairingState::WaitingForApproval);
+    EXPECT_FALSE(f.client->tokens().has_value());
+
+    const auto second = f.client->poll(1010);
+    EXPECT_EQ(second.state, PairingState::WaitingForApproval);
+    EXPECT_FALSE(f.client->tokens().has_value());
+
+    const auto third = f.client->poll(1015);
+    EXPECT_EQ(third.state, PairingState::Approved);
+    ASSERT_TRUE(f.client->tokens().has_value());
+    EXPECT_EQ(f.client->tokens()->accessToken, "zugangstoken");
+    EXPECT_EQ(f.client->tokens()->refreshToken, "erneuerungstoken");
+
+    ASSERT_EQ(f.transport->calls.size(), std::size_t{4});
+}
+
+TEST(PairingClientTest, BeginReportsRateLimitingTruthfully) {
+    Fixture f;
+    f.transport->queueResult(jsonResult(
+        429, R"({"error":"Too Many Requests","detail":"Rate limit exceeded.","retry_after":45})"));
+
+    const auto progress = f.client->begin("geraet-1", "Rechner", 1000);
+
+    // Failed bleibt es - es gibt keinen Code, den man abfragen könnte -,
+    // aber die Meldung muss die tatsächliche Wartezeit nennen statt
+    // fälschlich zu behaupten, der Server hätte gar keinen Code ausgestellt.
+    EXPECT_EQ(progress.state, PairingState::Failed);
+    EXPECT_NE(progress.message.find("45"), std::string::npos);
+    EXPECT_FALSE(f.client->prompt().has_value());
+}
+
+TEST(PairingClientTest, BeginFallsBackToASaneDelayMessageWhenRetryAfterIsMissing) {
+    Fixture f;
+    f.transport->queueResult(jsonResult(429, R"({"error":"Too Many Requests"})"));
+
+    const auto progress = f.client->begin("geraet-1", "Rechner", 1000);
+
+    EXPECT_EQ(progress.state, PairingState::Failed);
+    EXPECT_NE(progress.message.find("60"), std::string::npos);
+}
+
+TEST(PairingClientTest, ASecondFailedBeginClearsThePreviousPromptAndTokens) {
+    Fixture f;
+    f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
+    f.client->begin("geraet-1", "Rechner", 1000);
+    f.transport->queueResult(jsonResult(200, kApprovedResponse));
+    f.client->poll(1005);
+    ASSERT_TRUE(f.client->prompt().has_value());
+    ASSERT_TRUE(f.client->tokens().has_value());
+
+    // Ein zweiter begin() auf demselben Objekt, der scheitert - genau das
+    // würde ein "erneut versuchen"-Knopf auf einem Dialog auslösen.
+    f.transport->queueResult(jsonResult(500, R"({"detail":"boom"})"));
+    const auto progress = f.client->begin("geraet-1", "Rechner", 2000);
+
+    EXPECT_EQ(progress.state, PairingState::Failed);
+    // Der Kern dieses Tests: kein Prompt und kein Token aus dem ersten,
+    // erfolgreichen Lauf darf hinter dem Failed-Zustand noch lesbar sein.
+    EXPECT_FALSE(f.client->prompt().has_value());
+    EXPECT_FALSE(f.client->tokens().has_value());
+}
+
 TEST(PairingClientTest, NeverRetriesFasterThanTheServerAskedFor) {
     Fixture f;
     // Server gibt hier 30 Sekunden vor - deutlich mehr als der feste

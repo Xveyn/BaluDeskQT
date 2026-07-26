@@ -75,6 +75,17 @@ PairingProgress PairingClient::waiting(int waitSeconds, std::string message) {
 PairingProgress PairingClient::begin(const std::string& deviceId,
                                      const std::string& deviceName,
                                      std::int64_t nowSeconds) {
+    // Ein zweiter begin() auf demselben Objekt - etwa "erneut versuchen" in
+    // einem künftigen Dialog - darf keine Reste des vorigen Laufs überleben
+    // lassen, falls dieser zweite Versuch scheitert. Ohne diesen Rückbau
+    // blieben ein alter Prompt und alte Token hinter einem Failed-Zustand
+    // lesbar; das Prüfprogramm bemerkt das nicht, weil es vorher den
+    // Zustand prüft, ein Dialog aber möglicherweise nicht.
+    state_ = PairingState::Idle;
+    prompt_.reset();
+    tokens_.reset();
+    deviceCode_.clear();
+
     nlohmann::json request;
     request["device_id"] = deviceId;
     request["device_name"] = deviceName;
@@ -91,6 +102,26 @@ PairingProgress PairingClient::begin(const std::string& deviceId,
                       "Das Zertifikat des Servers weicht vom bestätigten ab. "
                       "Die Verbindung wurde abgebrochen.");
     }
+    if (result.statusCode == 429) {
+        // Die Codeanforderung ist auf 3 Anfragen je Minute begrenzt. Ein
+        // Nutzer, der den Knopf mehrfach drückt, bekäme sonst eine
+        // irreführende "kein Gerätecode"-Meldung und würde es prompt wieder
+        // versuchen - und die Sperre damit nur verlängern. Es bleibt Failed,
+        // weil kein Code vorliegt, den man abfragen könnte, aber die Meldung
+        // muss die Wartezeit ehrlich nennen.
+        int retryAfter = kFallbackBackoffSeconds;
+        if (const auto document = parse(result.body)) {
+            retryAfter = intField(*document, "retry_after", kFallbackBackoffSeconds);
+        }
+        if (retryAfter < 1) {
+            retryAfter = kFallbackBackoffSeconds;
+        }
+        Logger::warn("Pairing: Ratenbegrenzung bei der Codeanforderung, warte {} s", retryAfter);
+        return finish(PairingState::Failed,
+                      "Der Server bremst die Anfragen. Bitte in " +
+                          std::to_string(retryAfter) + " Sekunden erneut versuchen.");
+    }
+
     if (!result.ok()) {
         Logger::warn("Pairing: Gerätecode nicht erhalten, Status {} — {}",
                      result.statusCode, result.detail);

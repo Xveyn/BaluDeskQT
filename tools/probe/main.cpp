@@ -1,6 +1,11 @@
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <chrono>
-#include <cstdlib>
 #include <cstdint>
+#include <filesystem>
+#include <ios>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -12,6 +17,7 @@
 #include "core/api/TlsPolicy.h"
 #include "core/auth/FileSessionRepository.h"
 #include "core/auth/PairingClient.h"
+#include "core/auth/SessionPaths.h"
 #include "core/util/Logger.h"
 #include "core/util/TlsTrust.h"
 #include "core/util/WindowsCredentialStore.h"
@@ -26,16 +32,11 @@ std::int64_t nowSeconds() {
         .count();
 }
 
+// Einzige Quelle der Wahrheit für den Ablageort - siehe
+// core/auth/SessionPaths.h. Ein eigener, lokaler Aufbau dieses Pfads (wie
+// früher hier) hält nur zufällig mit dem der Oberfläche Schritt.
 std::string sessionPath() {
-    // std::getenv gilt bei MSVC unter /W4 als "unsicher" (C4996) und würde die
-    // Warnungsfreiheit des Builds verletzen. Hier bewusst und begrenzt
-    // unterdrückt statt projektweit, da nur diese eine Stelle betroffen ist.
-#pragma warning(push)
-#pragma warning(disable : 4996)
-    const char* localAppData = std::getenv("LOCALAPPDATA");
-#pragma warning(pop)
-    const std::string base = localAppData != nullptr ? localAppData : ".";
-    return base + "/BaluHost/BaluDesk/session.json";
+    return defaultSessionPath();
 }
 
 void printUsage() {
@@ -207,9 +208,7 @@ int commandLogout() {
     return 0;
 }
 
-}  // namespace
-
-int main(int argc, char* argv[]) {
+int run(int argc, char* argv[]) {
     if (argc < 2) {
         printUsage();
         return 2;
@@ -233,4 +232,36 @@ int main(int argc, char* argv[]) {
 
     printUsage();
     return 2;
+}
+
+}  // namespace
+
+int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    // Die Konsole steht sonst auf der lokalen Windows-Codepage - deutscher
+    // Text (etwa "Öffnen") kommt dort als "Ãffnen" an. Die Daten selbst sind
+    // korrekt UTF-8, nur die Konsole liest sie falsch.
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+    // std::cout ist bei Umleitung (Datei, Pipe) vollständig gepuffert statt
+    // zeilengepuffert - der sechsstellige Paarungscode käme in einem
+    // automatisierten Lauf sonst erst beim Programmende an, wenn überhaupt.
+    // Genau das hat einen automatisierten Abnahmelauf schon einmal blind
+    // gemacht.
+    std::cout << std::unitbuf;
+
+    // Protokollverzeichnis neben der Sitzungsdatei, nicht in ihr - beide
+    // leiten sich aus demselben, einzig verbindlichen Pfad ab
+    // (core/auth/SessionPaths.h). Ohne dieses Protokoll ist nicht
+    // erkennbar, welches Token fehlschlug, ob der Rückbau selbst
+    // fehlschlug oder warum ein Abruf erneut versucht wurde - alles Fragen,
+    // die die Bibliothek nur über den Logger beantwortet.
+    const std::filesystem::path logDirectory =
+        std::filesystem::path(defaultSessionPath()).parent_path() / "logs";
+    Logger::init(logDirectory.string(), 1024 * 1024, 3);
+
+    const int result = run(argc, argv);
+
+    Logger::shutdown();
+    return result;
 }

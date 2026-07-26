@@ -146,6 +146,74 @@ TEST(SessionRepositoryTest, ReportsNothingWhenTheServerUrlIsMissing) {
     EXPECT_FALSE(repository.load().has_value());
 }
 
+TEST(SessionRepositoryTest, RejectsAReloadedSessionWithAnInsecureServerUrl) {
+    const auto directory = makeEmptyTempDir("unsicherewiederkehr");
+    FakeSecretStore secrets;
+    const std::string path = (directory / "session.json").string();
+
+    {
+        FileSessionRepository repository(path, secrets);
+        ASSERT_TRUE(repository.save(exampleSession()));
+    }
+
+    // Datei nachträglich von Hand mit einer unsicheren Adresse überschreiben -
+    // etwa durch eine aus einer anderen Umgebung kopierte session.json. Die
+    // Geheimnisse im FakeSecretStore bleiben unverändert gültig; nur die
+    // wiedereingelesene Adresse ist jetzt bösartig. load() muss dieselbe
+    // Prüfung durchlaufen wie jeder andere Aufrufer von checkServerUrl, sonst
+    // ginge ein Bearer-Token blank über http zu einem fremden Rechner.
+    {
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        stream << R"({"server_url":"http://nas.example.com","username":"sven",)"
+                  R"("public_key_pin":""})";
+    }
+
+    FileSessionRepository repository(path, secrets);
+    EXPECT_FALSE(repository.load().has_value());
+}
+
+TEST(SessionRepositoryTest, RollsBackAndLeavesNoTempFileWhenTheWriteFails) {
+    const auto directory = makeEmptyTempDir("schreibfehler");
+    FakeSecretStore secrets;
+
+    const std::string goodPath = (directory / "session.json").string();
+    FileSessionRepository firstRepository(goodPath, secrets);
+    ASSERT_TRUE(firstRepository.save(exampleSession()));
+
+    // "<" ist unter Windows in Datei- und Verzeichnisnamen unzulässig
+    // (reservierte Zeichen: < > : " / \ | ? *) - schon das Öffnen zum
+    // Schreiben scheitert zuverlässig mit ERROR_INVALID_NAME, ohne dass
+    // irgendetwas dafür fehlen müsste (dieselbe Masche wie
+    // LoggerTest.InitWithUnusableDirectoryDoesNotThrow). Dieselbe
+    // Geheimnisablage, ein anderer - unschreibbarer - Pfad: das bildet den
+    // Fall nach, den ein Token-Refresh in Stufe 1c erzeugen würde.
+    const std::string badPath = (directory / "session<invalid>.json").string();
+    FileSessionRepository secondRepository(badPath, secrets);
+
+    Session updated = exampleSession();
+    updated.accessToken = "neues-zugangstoken";
+    updated.refreshToken = "neues-erneuerungstoken";
+
+    EXPECT_FALSE(secondRepository.save(updated));
+
+    // Der Kern dieses Tests: die Geheimnisse müssen wieder auf dem alten
+    // Stand stehen, nicht auf den neuen Werten, die schon abgelegt waren,
+    // bevor der Dateizugriff scheiterte.
+    const auto loaded = firstRepository.load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->accessToken, "zugangstoken");
+    EXPECT_EQ(loaded->refreshToken, "erneuerungstoken");
+
+    // Keine Rumpfdatei (.tmp) darf im Verzeichnis zurückbleiben - nur die
+    // eine session.json aus dem ersten, erfolgreichen Ablegen.
+    std::size_t fileCount = 0;
+    for (const auto& entry : fs::directory_iterator(directory)) {
+        (void)entry;
+        ++fileCount;
+    }
+    EXPECT_EQ(fileCount, std::size_t{1});
+}
+
 TEST(SessionRepositoryTest, ClearRemovesFileAndSecrets) {
     const auto directory = makeEmptyTempDir("abmelden");
     FakeSecretStore secrets;
