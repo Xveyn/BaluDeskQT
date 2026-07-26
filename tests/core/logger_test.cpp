@@ -2,8 +2,10 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <filesystem>
 #include <string>
+#include <thread>
 
 namespace fs = std::filesystem;
 using baludesk::core::Logger;
@@ -95,4 +97,27 @@ TEST_F(LoggerTest, LoggingBeforeInitDoesNotCrash) {
     Logger::error("Fehler ohne Initialisierung");
 
     SUCCEED();
+}
+
+TEST_F(LoggerTest, LoggingSurvivesConcurrentShutdown) {
+    const fs::path directory = makeEmptyTempDir("race");
+    Logger::init(directory.string(), 1024 * 1024, 3);
+
+    std::atomic<bool> stop{false};
+    std::thread writer([&stop] {
+        while (!stop.load(std::memory_order_relaxed)) {
+            Logger::info("Eintrag aus dem Schreiberthread");
+        }
+    });
+
+    for (int round = 0; round < 200; ++round) {
+        Logger::shutdown();
+        Logger::init(directory.string(), 1024 * 1024, 3);
+    }
+
+    stop.store(true, std::memory_order_relaxed);
+    writer.join();
+
+    EXPECT_TRUE(Logger::isInitialized());
+    EXPECT_EQ(Logger::logFilePath(), directory.string() + "/baludesk.log");
 }

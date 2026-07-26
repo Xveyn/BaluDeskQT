@@ -66,10 +66,9 @@ void Logger::flush() {
     }
 }
 
-spdlog::logger* Logger::raw() {
-    // Bewusst ohne Sperre: init() läuft beim Programmstart, bevor weitere
-    // Threads existieren, und danach ändert sich der Zeiger nicht mehr.
-    return g_logger.get();
+std::shared_ptr<spdlog::logger> Logger::handle() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_logger;
 }
 
 }  // namespace baludesk::core
