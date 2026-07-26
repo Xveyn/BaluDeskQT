@@ -1155,7 +1155,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 42 Tests, alle bestanden.
+Erwartet: 42 Tests, alle bestanden. (Nach der Fix-Runde dieses Tasks wurden es 45 — siehe Ledger.)
 
 - [ ] **Step 8: Nachweisen, dass nichts im Credential Manager liegen bleibt**
 
@@ -1724,7 +1724,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 53 Tests, alle bestanden.
+Erwartet: 56 Tests, alle bestanden.
 
 - [ ] **Step 8: `src/core/api/CurlTransport.h` und `.cpp` schreiben**
 
@@ -2065,7 +2065,7 @@ Alle fünf Punkte müssen zutreffen:
 
 1. Konfigurieren läuft durch, `libcrypto-3-x64.dll` und `libssl-3-x64.dll` liegen unter `build/msvc2022/vcpkg_installed/x64-windows/bin` — curl spricht also OpenSSL
 2. Bauen ohne Warnungen aus eigenem Code
-3. `ctest --preset debug` meldet **53 bestandene Tests**, 0 fehlgeschlagen
+3. `ctest --preset debug` meldet **56 bestandene Tests**, 0 fehlgeschlagen
 4. `cmdkey /list | Select-String "BaluDesk"` gibt nichts aus — die Tests haben aufgeräumt
 5. Die drei Läufe des Abnahmeprogramms aus Task 4 Step 9 verhalten sich wie beschrieben, insbesondere Lauf C mit korrektem und mit verfälschtem Pin
 
