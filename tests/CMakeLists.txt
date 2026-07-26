@@ -41,6 +41,7 @@ gtest_discover_tests(baludesk_core_tests)
 # --- App-Tests: brauchen Qt --------------------------------------------
 add_executable(baludesk_app_tests
     app/settings_store_test.cpp
+    app/qt_log_bridge_test.cpp
 )
 
 target_link_libraries(baludesk_app_tests PRIVATE

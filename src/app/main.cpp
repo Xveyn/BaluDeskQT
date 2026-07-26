@@ -3,6 +3,7 @@
 #include <QStandardPaths>
 
 #include "app/MainWindow.h"
+#include "app/QtLogBridge.h"
 #include "app/SettingsStore.h"
 #include "core/util/AppConfig.h"
 #include "core/util/Logger.h"
@@ -32,6 +33,8 @@ int main(int argc, char* argv[]) {
     baludesk::core::Logger::init(logDirectory.toStdString(),
                                  config.logMaxFileBytes,
                                  config.logMaxFiles);
+    // Ab hier landen auch Qts eigene Meldungen im Protokoll statt im Nichts.
+    baludesk::app::installQtLogBridge();
     baludesk::core::Logger::info("BaluDesk {} gestartet",
                                  QCoreApplication::applicationVersion().toStdString());
     baludesk::core::Logger::info("Abfrageintervall: {} s", config.pollIntervalSeconds);
