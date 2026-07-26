@@ -57,3 +57,62 @@ TEST(AppConfigTest, ClampingIsIdempotent) {
     const AppConfig twice = once.clamped();
     EXPECT_TRUE(once == twice);
 }
+
+TEST(AppConfigTest, ConstantsMatchTheSpecifiedLiterals) {
+    // Verankert die Grenzwerte gegen die Spezifikation. Ohne diesen Test
+    // pruefen alle uebrigen nur gegen die Konstanten des Pruflings selbst.
+    EXPECT_EQ(AppConfig::kMinPollIntervalSeconds, 15);
+    EXPECT_EQ(AppConfig::kMaxPollIntervalSeconds, 3600);
+    EXPECT_EQ(AppConfig::kMinLogMaxFileBytes, std::size_t{65536});
+    EXPECT_EQ(AppConfig::kMaxLogMaxFileBytes, std::size_t{52428800});
+    EXPECT_EQ(AppConfig::kMaxLogFiles, std::size_t{20});
+}
+
+TEST(AppConfigTest, LeavesLowerBoundaryValuesUntouched) {
+    AppConfig config;
+    config.pollIntervalSeconds = 15;
+    config.logMaxFileBytes = std::size_t{65536};
+    config.logMaxFiles = 1;
+
+    const AppConfig result = config.clamped();
+    EXPECT_EQ(result.pollIntervalSeconds, 15);
+    EXPECT_EQ(result.logMaxFileBytes, std::size_t{65536});
+    EXPECT_EQ(result.logMaxFiles, std::size_t{1});
+}
+
+TEST(AppConfigTest, LeavesUpperBoundaryValuesUntouched) {
+    AppConfig config;
+    config.pollIntervalSeconds = 3600;
+    config.logMaxFileBytes = std::size_t{52428800};
+    config.logMaxFiles = 20;
+
+    const AppConfig result = config.clamped();
+    EXPECT_EQ(result.pollIntervalSeconds, 3600);
+    EXPECT_EQ(result.logMaxFileBytes, std::size_t{52428800});
+    EXPECT_EQ(result.logMaxFiles, std::size_t{20});
+}
+
+TEST(AppConfigTest, ClampsJustOutsideTheBoundaries) {
+    AppConfig config;
+
+    config.pollIntervalSeconds = 14;
+    EXPECT_EQ(config.clamped().pollIntervalSeconds, 15);
+
+    config.pollIntervalSeconds = 3601;
+    EXPECT_EQ(config.clamped().pollIntervalSeconds, 3600);
+}
+
+TEST(AppConfigTest, ClampsLogFileSizeAboveMaximum) {
+    AppConfig config;
+    config.logMaxFileBytes = std::size_t{500} * 1024 * 1024;
+    EXPECT_EQ(config.clamped().logMaxFileBytes, std::size_t{52428800});
+}
+
+TEST(AppConfigTest, InequalityIsTheNegationOfEquality) {
+    AppConfig left;
+    AppConfig right;
+    EXPECT_FALSE(left != right);
+
+    right.pollIntervalSeconds = 120;
+    EXPECT_TRUE(left != right);
+}
