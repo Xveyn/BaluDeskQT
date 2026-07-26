@@ -19,6 +19,7 @@ enable_testing()
 add_subdirectory(src/core)
 add_subdirectory(src/app)
 add_subdirectory(tests)
+add_subdirectory(tools/probe)
 
 # Absicherung der Schichtgrenze: baludesk_core darf kein Qt linken
 # (Spec Abschnitt 2.4). Steht bewusst hier und nicht in src/core, weil zu

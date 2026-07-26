@@ -11,18 +11,22 @@
 
 find_package(spdlog CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(CURL REQUIRED)
 
 add_library(baludesk_core STATIC
     util/AppConfig.cpp
     util/Logger.cpp
     util/TlsTrust.cpp
     util/CredentialStore.cpp
+    api/HttpClient.cpp
+    api/CurlTransport.cpp
 )
 
 target_include_directories(baludesk_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(baludesk_core PUBLIC
     spdlog::spdlog
     OpenSSL::Crypto
+    CURL::libcurl
 )
 
 if(WIN32)

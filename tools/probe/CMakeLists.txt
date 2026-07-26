@@ -1,0 +1,2 @@
+add_executable(baludesk_probe main.cpp)
+target_link_libraries(baludesk_probe PRIVATE baludesk_core)
