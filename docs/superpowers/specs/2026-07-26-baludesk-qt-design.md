@@ -595,6 +595,39 @@ durchgängig über den Namen angesprochen werden — dann gilt Abschnitt 2.9 ohn
 
 ---
 
+### Stufe 1b — Pairing-Ablauf und Sitzung (abgenommen 2026-07-26)
+
+122 Tests. Die Abnahme wurde gemeinsam mit dem Betreiber gegen den laufenden Server
+gefahren, weil der entscheidende Schritt einen Menschen am Browser verlangt.
+
+| Prüfung | Ergebnis |
+|---|---|
+| `pair "http://nas.example.com"` | abgelehnt **vor** jedem Netzkontakt |
+| `pair "baluhost.duckdns.org"` | Zertifikat regulär geprüft, Code angezeigt, nach Freigabe im Browser gepaart |
+| Geräteliste der Web-Oberfläche | zeigt den Client als aktives Desktop-Gerät — der Server registriert selbst, ein eigener Aufruf entfällt |
+| **`status` in einem neuen Prozess** | **verbunden, `/api/auth/me` → 200** |
+| `session.json` | nur Adresse, Benutzername, Pin — **kein Token** |
+| Anmeldeinformationsspeicher | beide Token getrennt unter `BaluDesk:session/…`, gerätegebunden |
+| `logout` | Datei entfernt, Sitzung weg |
+| `pair "baluhost.local"` | Fingerabdruck abgefragt — er stimmte **zeichengenau** mit dem aus der Abnahme der Stufe 1a überein |
+| `status` danach | „Zertifikat: angeheftet", 200; der abgelegte Pin gleich dem aus 1a |
+
+Die vierte Zeile ist das Abnahmekriterium aus Abschnitt 12: **ein Neustart führt ohne
+erneutes Paaren zu einer authentifizierten Sitzung.**
+
+Zwei Eigenschaften wurden dabei unabhängig doppelt belegt: Fingerabdruck und Pin des
+Servers stimmten mit den Werten überein, die Stufe 1a auf einem anderen Weg ermittelt
+hatte. Und die Ablage hält, was sie verspricht — die Token stehen nachweislich **nicht**
+in der Datei.
+
+Beim Abschlussreview kam ein Fehler ans Licht, der in derselben Stufe schon einmal
+repariert worden war: der Rückbau sicherte zwar die Geheimnisse, aber das Öffnen der
+Datei mit `trunc` zerstörte sie vorher. Behoben durch Schreiben in eine Nebendatei und
+atomares Umbenennen — die bestehende Datei bleibt unangetastet, bis das Umbenennen
+gelingt.
+
+---
+
 ## 15. Anhang: Zustand des Alt-Clients
 
 Zur Einordnung, warum neu gebaut wird.
