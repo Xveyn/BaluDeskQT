@@ -5,6 +5,20 @@
 
 namespace baludesk::core {
 
+#ifdef _WIN32
+namespace detail {
+
+// UTF-8 nach UTF-16. Steht sichtbar im Header, damit die Wandlung gegen eine
+// bekannte Bytefolge geprüft werden kann statt nur im Rundlauf durch sich
+// selbst - ein Rundlauf wäre auch mit einer falschen Wandlung grün, solange
+// Schreib- und Lesepfad dieselbe benutzen.
+//
+// Leer, wenn die Eingabe kein gültiges UTF-8 ist.
+[[nodiscard]] std::wstring utf8ToWide(const std::string& utf8);
+
+}  // namespace detail
+#endif
+
 // Ablage für Geheimnisse im Anmeldeinformationsspeicher des Betriebssystems.
 //
 // Windows: Credential Manager (wincred). Die Linux- und macOS-Zweige folgen,

@@ -41,8 +41,13 @@ TEST_F(CredentialStoreTest, RoundTripsASecret) {
 }
 
 TEST_F(CredentialStoreTest, SurvivesUmlautsInKeyAndValue) {
-    // Der Alt-Client verbreiterte byteweise nach wchar_t und verstümmelte
-    // damit jedes Zeichen jenseits von ASCII. Dieser Test hält das fest.
+    // Prüft den echten Rundlauf über den Windows Credential Manager mit
+    // Umlauten in Schlüssel und Wert. Die eigentliche Absicherung gegen die
+    // byteweise Alt-Client-Verbreiterung liefern die
+    // CredentialStoreConversionTest-Fälle weiter unten: Ein Rundlauf allein
+    // bliebe grün, selbst wenn Schreib- und Lesepfad dieselbe falsche
+    // Wandlung benutzten - Windows vergleicht Zielnamen nur als
+    // undurchsichtige Kennung.
     const std::string secret = "Straße-Öl-Übermut-ß";
     ASSERT_TRUE(CredentialStore::save(kKeyUmlauts, secret));
 
@@ -91,3 +96,34 @@ TEST_F(CredentialStoreTest, RejectsAnEmptyKey) {
     EXPECT_FALSE(CredentialStore::load("").has_value());
     EXPECT_FALSE(CredentialStore::contains(""));
 }
+
+#ifdef _WIN32
+
+TEST(CredentialStoreConversionTest, DecodesUtf8InsteadOfWideningBytes) {
+    // "grüße" — ü und ß liegen in UTF-8 als Zweibytefolgen vor, die
+    // Zeichenkette ist also 7 Bytes lang bei 5 Zeichen.
+    const std::string utf8 = "gr\xC3\xBC\xC3\x9F" "e";
+    const std::wstring wide = baludesk::core::detail::utf8ToWide(utf8);
+
+    // Genau hier scheiden sich die beiden Wandlungen: eine echte Dekodierung
+    // liefert 5 Zeichen, die byteweise Verbreiterung des Alt-Clients liefert
+    // 7 - für jedes Byte eines. Die Längenprüfung allein erledigt den
+    // Regressionsschutz, die Einzelwerte belegen zusätzlich die Kodierung.
+    ASSERT_EQ(wide.size(), std::size_t{5});
+    EXPECT_EQ(wide[0], L'g');
+    EXPECT_EQ(wide[1], L'r');
+    EXPECT_EQ(wide[2], static_cast<wchar_t>(0x00FC));  // ü
+    EXPECT_EQ(wide[3], static_cast<wchar_t>(0x00DF));  // ß
+    EXPECT_EQ(wide[4], L'e');
+}
+
+TEST(CredentialStoreConversionTest, RejectsInvalidUtf8) {
+    // 0xFF kommt in gültigem UTF-8 nie vor.
+    EXPECT_TRUE(baludesk::core::detail::utf8ToWide(std::string("\xFF", 1)).empty());
+}
+
+TEST(CredentialStoreConversionTest, MapsEmptyInputToEmptyOutput) {
+    EXPECT_TRUE(baludesk::core::detail::utf8ToWide("").empty());
+}
+
+#endif

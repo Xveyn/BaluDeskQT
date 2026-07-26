@@ -11,17 +11,13 @@
 #include <string>
 
 namespace baludesk::core {
-namespace {
-
-// Präfix für alle Einträge, damit BaluDesks Anmeldeinformationen im Credential
-// Manager erkennbar sind und nicht mit fremden kollidieren. Bewusst hier und
-// nicht im Header: außerhalb dieser Datei braucht es niemand.
-constexpr const char* kTargetPrefix = "BaluDesk:";
 
 // UTF-8 nach UTF-16. Der Alt-Client schrieb hier std::wstring(s.begin(),
 // s.end()) und verbreiterte damit jedes Byte einzeln - alles jenseits von
-// ASCII wurde dabei zerlegt.
-std::wstring toWide(const std::string& utf8) {
+// ASCII wurde dabei zerlegt. Sichtbar in detail statt im anonymen
+// Namensraum, damit die Wandlung direkt gegen bekannte Bytefolgen geprüft
+// werden kann - siehe CredentialStore.h.
+std::wstring detail::utf8ToWide(const std::string& utf8) {
     if (utf8.empty()) {
         return {};
     }
@@ -40,8 +36,15 @@ std::wstring toWide(const std::string& utf8) {
     return wide;
 }
 
+namespace {
+
+// Präfix für alle Einträge, damit BaluDesks Anmeldeinformationen im Credential
+// Manager erkennbar sind und nicht mit fremden kollidieren. Bewusst hier und
+// nicht im Header: außerhalb dieser Datei braucht es niemand.
+constexpr const char* kTargetPrefix = "BaluDesk:";
+
 std::wstring targetNameFor(const std::string& key) {
-    return toWide(std::string(kTargetPrefix) + key);
+    return detail::utf8ToWide(std::string(kTargetPrefix) + key);
 }
 
 struct CredentialDeleter {
@@ -105,6 +108,13 @@ std::optional<std::string> CredentialStore::load(const std::string& key) {
     const CredentialPtr credential = readCredential(key);
     if (!credential) {
         return std::nullopt;
+    }
+
+    if (credential->CredentialBlobSize == 0) {
+        // std::string(nullptr, 0) ist vor C++20 formal undefiniert, auch wenn
+        // es in der Praxis überall funktioniert. Ein leeres Geheimnis ist ein
+        // gültiger Fall, kein Fehler.
+        return std::string();
     }
 
     return std::string(reinterpret_cast<const char*>(credential->CredentialBlob),
