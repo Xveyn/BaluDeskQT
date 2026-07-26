@@ -12,6 +12,7 @@
 find_package(spdlog CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 add_library(baludesk_core STATIC
     util/AppConfig.cpp
@@ -22,6 +23,7 @@ add_library(baludesk_core STATIC
     api/HttpClient.cpp
     api/CurlTransport.cpp
     api/ServerUrl.cpp
+    auth/PairingClient.cpp
 )
 
 target_include_directories(baludesk_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
@@ -56,3 +58,7 @@ target_link_libraries(baludesk_core
 if(WIN32)
     target_link_libraries(baludesk_core PRIVATE Advapi32)
 endif()
+
+# nlohmann_json bleibt PRIVATE: kein öffentlicher Header von core/ zeigt
+# einen JSON-Typ, JSON wird ausschließlich in .cpp-Dateien verarbeitet.
+target_link_libraries(baludesk_core PRIVATE nlohmann_json::nlohmann_json)
