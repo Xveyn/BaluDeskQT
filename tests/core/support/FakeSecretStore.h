@@ -14,8 +14,8 @@ namespace baludesk::core::test {
 class FakeSecretStore : public SecretStore {
 public:
     bool save(const std::string& key, const std::string& secret) override {
-        if (key.empty() || failNextSave) {
-            failNextSave = false;
+        ++saveCallCount;
+        if (key.empty() || saveCallCount == failOnSaveNumber) {
             return false;
         }
         entries[key] = secret;
@@ -41,9 +41,13 @@ public:
 
     std::map<std::string, std::string> entries;
 
-    // Lässt den nächsten save()-Aufruf scheitern, um die Fehlerbehandlung zu
-    // prüfen. Setzt sich danach selbst zurück.
-    bool failNextSave = false;
+    // Lässt den n-ten save()-Aufruf scheitern (1 = der erste). 0 heißt: nie.
+    // Ein Zähler statt eines Schlüsselnamens, weil die Schlüssel private
+    // Konstanten von FileSessionRepository sind — ein Test soll sie nicht
+    // kennen müssen, um einen Zweig zu erreichen.
+    std::size_t failOnSaveNumber = 0;
+
+    std::size_t saveCallCount = 0;
 };
 
 }  // namespace baludesk::core::test

@@ -181,7 +181,7 @@ TEST(SessionRepositoryTest, ClearOnAnEmptyRepositoryIsHarmless) {
 TEST(SessionRepositoryTest, ReportsFailureWhenTheSecretCannotBeStored) {
     const auto directory = makeEmptyTempDir("speicherfehler");
     FakeSecretStore secrets;
-    secrets.failNextSave = true;
+    secrets.failOnSaveNumber = 1;
     FileSessionRepository repository((directory / "session.json").string(), secrets);
 
     // Ein Token, das nicht abgelegt werden konnte, darf nicht als
@@ -216,6 +216,47 @@ TEST(SessionRepositoryTest, CreatesMissingDirectories) {
     FileSessionRepository repository(path, secrets);
     EXPECT_TRUE(repository.save(exampleSession()));
     EXPECT_TRUE(fs::exists(path));
+}
+
+TEST(SessionRepositoryTest, RestoresThePreviousSessionWhenAnUpdateFails) {
+    const auto directory = makeEmptyTempDir("aktualisierung");
+    FakeSecretStore secrets;
+    FileSessionRepository repository((directory / "session.json").string(), secrets);
+
+    ASSERT_TRUE(repository.save(exampleSession()));
+
+    Session updated = exampleSession();
+    updated.accessToken = "neues-zugangstoken";
+    updated.refreshToken = "neues-erneuerungstoken";
+
+    // Der zweite Ablagevorgang scheitert - also das Erneuerungstoken, nachdem
+    // das Zugangstoken bereits überschrieben wurde. saveCallCount zählt über
+    // die gesamte Lebenszeit von secrets: der erste save() oben hat die
+    // Aufrufe 1 und 2 bereits verbraucht, das Erneuerungstoken dieses
+    // zweiten Ablagevorgangs ist deshalb Aufruf 4, nicht 2.
+    secrets.failOnSaveNumber = 4;
+    EXPECT_FALSE(repository.save(updated));
+
+    // Der Kern dieses Tests: die alte Sitzung muss unversehrt dastehen. Mit
+    // einem löschenden Rückbau wäre hier nichts mehr.
+    const auto loaded = repository.load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->accessToken, "zugangstoken");
+    EXPECT_EQ(loaded->refreshToken, "erneuerungstoken");
+}
+
+TEST(SessionRepositoryTest, LeavesNothingBehindWhenAFreshSaveFailsPartway) {
+    const auto directory = makeEmptyTempDir("frischgescheitert");
+    FakeSecretStore secrets;
+    FileSessionRepository repository((directory / "session.json").string(), secrets);
+
+    // Nichts vorhanden, und der zweite Ablagevorgang scheitert.
+    secrets.failOnSaveNumber = 2;
+    EXPECT_FALSE(repository.save(exampleSession()));
+
+    // Ohne vorherigen Stand heißt Rückbau: aufräumen, nicht wiederherstellen.
+    EXPECT_TRUE(secrets.entries.empty());
+    EXPECT_FALSE(repository.load().has_value());
 }
 
 TEST(SessionTest, IsValidOnlyWithEverythingThatMatters) {

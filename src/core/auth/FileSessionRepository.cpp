@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <utility>
 
 #include "core/util/Logger.h"
@@ -70,16 +71,38 @@ std::optional<Session> FileSessionRepository::load() {
 }
 
 bool FileSessionRepository::save(const Session& session) {
+    // Bisherigen Stand sichern. Ohne das würde ein misslungenes Aktualisieren
+    // die bestehende Sitzung zerstören: der Rückbau löschte den Schlüssel und
+    // damit auch den alten Wert — und der Server liefert Token kein zweites
+    // Mal aus.
+    const std::optional<std::string> previousAccessToken = secrets_.load(kAccessTokenKey);
+    const std::optional<std::string> previousRefreshToken = secrets_.load(kRefreshTokenKey);
+
+    const auto rollbackSecrets = [&]() {
+        const auto restore = [this](const char* key, const std::optional<std::string>& previous) {
+            const bool restored = previous ? secrets_.save(key, *previous) : secrets_.erase(key);
+            if (!restored) {
+                // Mehr ist an dieser Stelle nicht zu tun — aber wer die Datei
+                // später untersucht, soll wissen, dass etwas zurückblieb.
+                Logger::error("Sitzung: Rückbau von „{}“ fehlgeschlagen", key);
+            }
+        };
+        restore(kAccessTokenKey, previousAccessToken);
+        restore(kRefreshTokenKey, previousRefreshToken);
+    };
+
     // Die Geheimnisse zuerst: der Server liefert die Token genau einmal aus.
     // Scheitert das Ablegen, darf nichts zurückbleiben, was wie eine gültige
-    // Sitzung aussieht.
+    // Sitzung aussieht - und eine etwa schon bestehende Sitzung muss unversehrt
+    // bleiben statt gelöscht zu werden.
     if (!secrets_.save(kAccessTokenKey, session.accessToken)) {
         Logger::error("Sitzung: Zugangstoken konnte nicht abgelegt werden");
+        rollbackSecrets();
         return false;
     }
     if (!secrets_.save(kRefreshTokenKey, session.refreshToken)) {
         Logger::error("Sitzung: Erneuerungstoken konnte nicht abgelegt werden");
-        secrets_.erase(kAccessTokenKey);
+        rollbackSecrets();
         return false;
     }
 
@@ -97,8 +120,7 @@ bool FileSessionRepository::save(const Session& session) {
     std::ofstream stream(jsonPath_, std::ios::binary | std::ios::trunc);
     if (!stream.good()) {
         Logger::error("Sitzung: Ablagedatei konnte nicht geschrieben werden");
-        secrets_.erase(kAccessTokenKey);
-        secrets_.erase(kRefreshTokenKey);
+        rollbackSecrets();
         return false;
     }
     stream << document.dump(2);
@@ -106,8 +128,7 @@ bool FileSessionRepository::save(const Session& session) {
 
     if (!stream.good()) {
         Logger::error("Sitzung: Ablagedatei konnte nicht vollständig geschrieben werden");
-        secrets_.erase(kAccessTokenKey);
-        secrets_.erase(kRefreshTokenKey);
+        rollbackSecrets();
         return false;
     }
 
