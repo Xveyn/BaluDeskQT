@@ -1,0 +1,18 @@
+# Build-Ausgaben
+/build/
+/out/
+
+# vcpkg im Manifest-Modus
+/vcpkg_installed/
+
+# Persönliche CMake-Presets (Pfade, die nur lokal gelten)
+CMakeUserPresets.json
+
+# Qt Creator / Visual Studio
+*.user
+/.vs/
+/.vscode/
+
+# Laufzeitdaten
+/logs/
+*.log
