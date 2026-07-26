@@ -321,3 +321,25 @@ TEST(PairingClientTest, PollBeforeBeginIsRefusedWithoutTouchingTheNetwork) {
     EXPECT_EQ(progress.state, PairingState::Idle);
     EXPECT_TRUE(f.transport->calls.empty());
 }
+
+TEST(PairingClientTest, NeverRetriesFasterThanTheServerAskedFor) {
+    Fixture f;
+    // Server gibt hier 30 Sekunden vor - deutlich mehr als der feste
+    // Rückfallwert bei Netzfehlern.
+    f.transport->queueResult(jsonResult(200, R"({
+      "device_code": "geheimer-geraetecode",
+      "user_code": "483920",
+      "verification_url": "https://nas.example.com/devices?pair=1",
+      "expires_in": 600,
+      "interval": 30
+    })"));
+    f.client->begin("geraet-1", "Rechner", 1000);
+
+    f.transport->queueResult(transportFailure(HttpErrorKind::Network, "connection refused"));
+    const auto progress = f.client->poll(1030);
+
+    // Mit einem festen Rückfallwert käme hier 10 heraus - und der Client
+    // würde dreimal so schnell fragen, wie der Server erlaubt.
+    EXPECT_EQ(progress.state, PairingState::WaitingForApproval);
+    EXPECT_GE(progress.waitSeconds, 30);
+}

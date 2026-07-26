@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <utility>
 
 #include "core/api/HttpClient.h"
@@ -18,7 +19,11 @@ constexpr const char* kPollPath = "/api/desktop-pairing/poll";
 constexpr int kFallbackBackoffSeconds = 60;
 
 // Ein Netzwerkfehler ist kein Grund aufzugeben - der Code lebt zehn Minuten,
-// und ein NAS kann in der Zeit durchaus neu starten.
+// und ein NAS kann in der Zeit durchaus neu starten. Das ist nur eine
+// Untergrenze: tatsächlich gewartet wird das Maximum aus diesem Wert und dem
+// vom Server vorgegebenen Intervall, damit ein Netzfehler die Zusicherung aus
+// der Klassenbeschreibung nicht unterläuft - das Intervall wird eingehalten
+// und nicht unterboten, auch nach einem Netzfehler nicht.
 constexpr int kNetworkRetrySeconds = 10;
 
 std::optional<nlohmann::json> parse(const std::string& body) {
@@ -160,10 +165,14 @@ PairingProgress PairingClient::poll(std::int64_t nowSeconds) {
     }
     if (result.error != HttpErrorKind::None) {
         // Netz weg, Zeitlimit, Zertifikat noch nicht bestätigt: alles
-        // vorübergehend. Später erneut versuchen, solange der Code lebt.
+        // vorübergehend. Später erneut versuchen, solange der Code lebt -
+        // aber nie schneller als das vom Server vorgegebene Intervall, sonst
+        // würde ein Netzfehler die Zusicherung "Intervall einhalten, nicht
+        // unterbieten" unterlaufen.
+        const int retrySeconds = std::max(intervalSeconds_, kNetworkRetrySeconds);
         Logger::debug("Pairing: Abruf fehlgeschlagen ({}), neuer Versuch in {} s",
-                      result.detail, kNetworkRetrySeconds);
-        return waiting(kNetworkRetrySeconds);
+                      result.detail, retrySeconds);
+        return waiting(retrySeconds);
     }
 
     if (result.statusCode == 429) {
