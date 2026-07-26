@@ -1307,6 +1307,12 @@ target_link_libraries(baludesk_app_tests PRIVATE
     GTest::gtest_main
 )
 
+# Notwendig, obwohl src/app dasselbe schon tut: importierte Ziele sind ohne
+# GLOBAL verzeichnisgebunden und damit im Geschwisterverzeichnis unsichtbar.
+# tests/ ist Geschwister von src/app, nicht Nachfahre - ohne diese Zeile
+# scheitert das get_target_property unten an einem unbekannten Qt6::Core.
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core)
+
 get_target_property(_qt_core_location Qt6::Core IMPORTED_LOCATION_RELEASE)
 if(NOT _qt_core_location)
     get_target_property(_qt_core_location Qt6::Core IMPORTED_LOCATION)
@@ -1321,7 +1327,42 @@ gtest_discover_tests(baludesk_app_tests
     DISCOVERY_MODE PRE_TEST
     PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${_qt_bin_dir}"
 )
+
+# ENVIRONMENT_MODIFICATION wirkt nur auf die von gtest_discover_tests einzeln
+# angelegten Tests, nicht auf den Discovery-Lauf selbst (CMakes
+# GoogleTestAddTests.cmake ruft dafür execute_process() ohne jede
+# Umgebungsanpassung auf). Ohne die Qt-DLLs direkt neben der .exe würde die
+# Testerkennung auf einem frischen build/-Verzeichnis mit 0xc0000135 (DLL
+# nicht gefunden) scheitern, bevor überhaupt ein Test läuft. windeployqt löst
+# das, indem es die Laufzeitbibliotheken neben baludesk_app_tests.exe legt —
+# genau wie für baludesk.exe in src/app/CMakeLists.txt.
+if(WIN32)
+    find_program(WINDEPLOYQT_EXECUTABLE_TESTS windeployqt
+        HINTS "${QT6_INSTALL_PREFIX}/bin" "${_qt_bin_dir}"
+        REQUIRED
+    )
+
+    add_custom_command(TARGET baludesk_app_tests POST_BUILD
+        COMMAND "${WINDEPLOYQT_EXECUTABLE_TESTS}"
+                --no-translations
+                --no-system-d3d-compiler
+                --no-opengl-sw
+                "$<TARGET_FILE:baludesk_app_tests>"
+        COMMENT "Qt-Laufzeitbibliotheken neben die Testausführung kopieren"
+        VERBATIM
+    )
+endif()
 ```
+
+Die eigene Cache-Variable `WINDEPLOYQT_EXECUTABLE_TESTS` ist Absicht: `src/app`
+sucht dasselbe Programm unter `WINDEPLOYQT_EXECUTABLE`, und zwei `find_program`
+auf denselben Namen würden sich gegenseitig überschreiben.
+
+Preis dieser Lösung, bewusst in Kauf genommen: die Qt-Laufzeit liegt danach
+zweimal im Build-Verzeichnis, einmal neben der Anwendung und einmal neben dem
+Testbinary. Unvermeidlich, weil beide in getrennten Ausgabeverzeichnissen
+landen und das Testbinary über `baludesk_app_lib` den vollen Widgets-Stapel
+linkt.
 
 - [ ] **Step 3: `src/app/CMakeLists.txt` erweitern**
 
