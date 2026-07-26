@@ -16,6 +16,7 @@ add_library(baludesk_core STATIC
     util/AppConfig.cpp
     util/Logger.cpp
     util/TlsTrust.cpp
+    util/CredentialStore.cpp
 )
 
 target_include_directories(baludesk_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
@@ -23,3 +24,7 @@ target_link_libraries(baludesk_core PUBLIC
     spdlog::spdlog
     OpenSSL::Crypto
 )
+
+if(WIN32)
+    target_link_libraries(baludesk_core PRIVATE Advapi32)
+endif()

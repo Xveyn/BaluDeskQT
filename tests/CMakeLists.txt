@@ -29,6 +29,7 @@ add_executable(baludesk_core_tests
     core/app_config_test.cpp
     core/logger_test.cpp
     core/tls_trust_test.cpp
+    core/credential_store_test.cpp
 )
 
 target_compile_definitions(baludesk_core_tests PRIVATE
