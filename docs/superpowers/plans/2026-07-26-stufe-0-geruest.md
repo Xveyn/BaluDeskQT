@@ -810,8 +810,10 @@ Datei `tests/core/logger_test.cpp`:
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <filesystem>
 #include <string>
+#include <thread>
 
 namespace fs = std::filesystem;
 using baludesk::core::Logger;
@@ -904,7 +906,41 @@ TEST_F(LoggerTest, LoggingBeforeInitDoesNotCrash) {
 
     SUCCEED();
 }
+
+TEST_F(LoggerTest, LoggingSurvivesConcurrentShutdown) {
+    const fs::path directory = makeEmptyTempDir("race");
+    Logger::init(directory.string(), 1024 * 1024, 3);
+
+    std::atomic<bool> stop{false};
+    std::thread writer([&stop] {
+        while (!stop.load(std::memory_order_relaxed)) {
+            Logger::info("Eintrag aus dem Schreiberthread");
+        }
+    });
+
+    for (int round = 0; round < 200; ++round) {
+        Logger::shutdown();
+        Logger::init(directory.string(), 1024 * 1024, 3);
+    }
+
+    stop.store(true, std::memory_order_relaxed);
+    writer.join();
+
+    EXPECT_TRUE(Logger::isInitialized());
+    EXPECT_EQ(Logger::logFilePath(), directory.string() + "/baludesk.log");
+}
 ```
+
+Der letzte Test belastet den Vertrag, den `handle()` herstellt: ein Schreiberthread
+protokolliert, während der Haupt-Thread den Logger zweihundertmal herunter- und
+wieder hochfährt. Mit einem ungesperrten Zugriff auf den rohen Zeiger fällt das
+mit hoher Wahrscheinlichkeit um, weil `shutdown()` das Objekt zerstört, während
+der Schreiber es benutzt.
+
+Rennen sind nichtdeterministisch — dass der Test durchläuft, beweist für sich
+genommen wenig. Dass er **nicht** durchläuft, beweist einen echten Fehler. Ein
+solcher Fehlschlag ist zu melden, nicht durch Abschwächen der Zusicherung zu
+beseitigen.
 
 - [ ] **Step 2: `src/core/CMakeLists.txt` erweitern**
 
@@ -962,6 +998,7 @@ Erwartet: FEHLER beim Konfigurieren — `Cannot find source file: util/Logger.cp
 #include <spdlog/spdlog.h>
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -969,10 +1006,15 @@ namespace baludesk::core {
 
 // Protokollierung in eine rotierende Datei mit fester Obergrenze.
 //
-// init() muss einmal beim Programmstart aufgerufen werden, bevor weitere
-// Threads laufen. Weitere Aufrufe von init() sind wirkungslos - der erste
-// gewinnt. Aufrufe vor init() sind erlaubt und verpuffen still, damit ein
-// vergessener Aufruf nicht zum Absturz führt.
+// init() wird einmal beim Programmstart aufgerufen, shutdown() einmal beim
+// Beenden. Weitere Aufrufe von init() sind wirkungslos - der erste gewinnt.
+// Aufrufe vor init() und nach shutdown() sind erlaubt und verpuffen still,
+// damit ein vergessener Aufruf nicht zum Absturz führt.
+//
+// Protokollaufrufe dürfen jederzeit nebenläufig zu init() und shutdown()
+// stattfinden. Dafür sorgt handle(): es liefert eine Kopie des shared_ptr
+// unter der Sperre, die das Logger-Objekt für die Dauer des Aufrufs am
+// Leben hält.
 class Logger {
 public:
     static void init(const std::string& logDirectory,
@@ -984,41 +1026,45 @@ public:
     [[nodiscard]] static bool isInitialized();
 
     // Vollständiger Pfad der aktiven Protokolldatei, leer wenn nicht
-    // initialisiert. Die Trennzeichen sind immer Schrägstriche.
+    // initialisiert. Zwischen Verzeichnis und Dateiname steht immer ein
+    // Schrägstrich; der übergebene Verzeichnisteil wird nicht normalisiert.
     [[nodiscard]] static std::string logFilePath();
 
     static void flush();
 
     template <typename... Args>
     static void debug(spdlog::format_string_t<Args...> format, Args&&... args) {
-        if (auto* logger = raw()) {
+        if (const auto logger = handle()) {
             logger->debug(format, std::forward<Args>(args)...);
         }
     }
 
     template <typename... Args>
     static void info(spdlog::format_string_t<Args...> format, Args&&... args) {
-        if (auto* logger = raw()) {
+        if (const auto logger = handle()) {
             logger->info(format, std::forward<Args>(args)...);
         }
     }
 
     template <typename... Args>
     static void warn(spdlog::format_string_t<Args...> format, Args&&... args) {
-        if (auto* logger = raw()) {
+        if (const auto logger = handle()) {
             logger->warn(format, std::forward<Args>(args)...);
         }
     }
 
     template <typename... Args>
     static void error(spdlog::format_string_t<Args...> format, Args&&... args) {
-        if (auto* logger = raw()) {
+        if (const auto logger = handle()) {
             logger->error(format, std::forward<Args>(args)...);
         }
     }
 
 private:
-    static spdlog::logger* raw();
+    // Liefert eine Kopie des Zeigers unter der Sperre. Die Kopie hält das
+    // Logger-Objekt für die Dauer des Aufrufs am Leben, auch wenn parallel
+    // shutdown() läuft — sonst schriebe der Aufrufer in zerstörten Speicher.
+    static std::shared_ptr<spdlog::logger> handle();
 };
 
 }  // namespace baludesk::core
@@ -1095,10 +1141,9 @@ void Logger::flush() {
     }
 }
 
-spdlog::logger* Logger::raw() {
-    // Bewusst ohne Sperre: init() läuft beim Programmstart, bevor weitere
-    // Threads existieren, und danach ändert sich der Zeiger nicht mehr.
-    return g_logger.get();
+std::shared_ptr<spdlog::logger> Logger::handle() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_logger;
 }
 
 }  // namespace baludesk::core
@@ -1111,7 +1156,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 18 Tests, alle bestanden.
+Erwartet: 19 Tests, alle bestanden.
 
 - [ ] **Step 8: Committen**
 
@@ -1410,7 +1455,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 22 Tests, alle bestanden.
+Erwartet: 23 Tests, alle bestanden.
 
 - [ ] **Step 8: `src/app/main.cpp` vollständig ersetzen**
 
@@ -1492,7 +1537,7 @@ Abnahmekriterien aus der Spec, Abschnitt 12 Stufe 0 — alle vier müssen zutref
 1. `cmake --preset msvc2022` läuft ohne Fehler durch, vcpkg löst alle fünf Abhängigkeiten auf
 2. `cmake --build --preset debug` erzeugt `baludesk.exe` ohne Warnungen aus eigenem Code
 3. Die .exe startet, zeigt das Fenster und schreibt beim Beenden ein vollständiges Protokoll
-4. `ctest --preset debug` meldet 22 bestandene Tests, 0 fehlgeschlagen
+4. `ctest --preset debug` meldet 23 bestandene Tests, 0 fehlgeschlagen
 
 - [ ] **Step 11: Committen**
 
