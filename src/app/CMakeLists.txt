@@ -4,10 +4,11 @@ qt_standard_project_setup()
 
 add_library(baludesk_app_lib STATIC
     MainWindow.cpp
+    SettingsStore.cpp
 )
 
 target_include_directories(baludesk_app_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_link_libraries(baludesk_app_lib PUBLIC Qt6::Widgets)
+target_link_libraries(baludesk_app_lib PUBLIC Qt6::Widgets baludesk_core)
 
 qt_add_executable(baludesk
     main.cpp
