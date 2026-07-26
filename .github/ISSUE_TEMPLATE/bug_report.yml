@@ -1,0 +1,86 @@
+name: Fehler melden
+description: Etwas verhält sich anders als erwartet
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke fürs Melden. Bitte **keine** Sicherheitslücken hier — dafür gibt es
+        [SECURITY.md](https://github.com/Xveyn/BaluDeskQT/blob/main/SECURITY.md).
+
+        Und bitte keine Zugangsdaten, Token oder echten Serveradressen in den Text
+        kopieren. Ein Protokollauszug reicht meist, wenn er vorher durchgesehen wurde.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Was ist passiert
+      description: Was hast du erwartet, was kam stattdessen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Schritte zum Nachstellen
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Wo tritt es auf
+      options:
+        - Bauen oder Konfigurieren
+        - Anwendung (Fenster, Dialoge)
+        - Prüfprogramm (baludesk_probe)
+        - Pairing oder Sitzung
+        - Verbindung, TLS, Zertifikat
+        - Weiß ich nicht
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: Ausgabe von `git rev-parse --short HEAD`
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Umgebung
+      description: Windows-Fassung, Qt-Fassung, Visual-Studio-Toolset, CMake-Fassung
+      placeholder: |
+        Windows 11 26200
+        Qt 6.8.0 msvc2022_64
+        VS Build Tools 2022, Toolset 17.14
+        CMake 4.2.1
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Protokollauszug
+      description: |
+        Aus `%LOCALAPPDATA%\BaluHost\BaluDesk\logs\baludesk.log`.
+        Bitte vorher durchsehen — Zugangsdaten protokolliert der Client zwar nicht,
+        aber Serveradressen und Benutzernamen stehen darin.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Vorab geprüft
+      options:
+        - label: Ich habe keine Zugangsdaten oder echten Serveradressen im Text gelassen
+          required: true
+        - label: Es geht um den Client, nicht um den BaluHost-Server
+          required: true

@@ -61,7 +61,7 @@ TEST(ServerUrlTest, RejectsPlainHttpToARemoteHost) {
 }
 
 TEST(ServerUrlTest, RejectsPlainHttpToARemoteIpAddress) {
-    EXPECT_EQ(checkServerUrl("http://192.168.178.53:8000").problem,
+    EXPECT_EQ(checkServerUrl("http://192.168.1.50:8000").problem,
               ServerUrlProblem::InsecureScheme);
 }
 

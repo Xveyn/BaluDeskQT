@@ -1,0 +1,63 @@
+name: Verbesserung vorschlagen
+description: Eine Funktion oder Änderung anregen
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ein Hinweis vorab, der Enttäuschungen erspart: der Umfang dieses Clients ist
+        bewusst eng. **Serveradministration** — RAID, Lüfter, Power-Profile, Plugins,
+        VPN — gehört ausdrücklich nicht hierher, ebenso wenig mehrere Serverprofile
+        oder ein Passwort-Login. Die Begründungen stehen in der
+        [Spezifikation](https://github.com/Xveyn/BaluDeskQT/blob/main/docs/superpowers/specs/2026-07-26-baludesk-qt-design.md),
+        Abschnitt 2 und 4.
+
+        Das heißt nicht, dass eine Entscheidung unumstößlich wäre — nur, dass ein
+        Vorschlag dagegen begründen sollte, warum die dort festgehaltene Überlegung
+        nicht mehr trägt.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Welches Problem löst das
+      description: Bitte das Problem beschreiben, nicht die Lösung. Was geht heute nicht?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Vorschlag
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Was hast du sonst erwogen
+      description: Auch „gar nichts tun" ist eine Möglichkeit — warum reicht sie nicht?
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Zu welcher Ausbaustufe passt das
+      description: Siehe die Tabelle im README
+      options:
+        - 1c — Oberfläche für Pairing und Sitzung
+        - 2 — Erster synchronisierender Ordner
+        - 3 — Alltagstauglichkeit (Infobereich, Autostart, mehrere Ordner)
+        - 4 — Konflikte
+        - 5 — Dashboard
+        - 6 — Datei-Explorer
+        - 7 — Auslieferung
+        - Passt in keine, ist etwas Neues
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Vorab geprüft
+      options:
+        - label: Ich habe Abschnitt 4 der Spezifikation gelesen (Nicht-Ziele)
+          required: true

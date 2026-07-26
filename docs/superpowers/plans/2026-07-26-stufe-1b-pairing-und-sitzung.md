@@ -222,7 +222,7 @@ TEST(ServerUrlTest, RejectsPlainHttpToARemoteHost) {
 }
 
 TEST(ServerUrlTest, RejectsPlainHttpToARemoteIpAddress) {
-    EXPECT_EQ(checkServerUrl("http://192.168.178.53:8000").problem,
+    EXPECT_EQ(checkServerUrl("http://192.168.1.50:8000").problem,
               ServerUrlProblem::InsecureScheme);
 }
 
@@ -2230,11 +2230,11 @@ Erwartet: die Meldung, dass unverschlüsseltes http nur zu localhost erlaubt ist
 Dies ist die Abnahme der Stufe. Der Server muss laufen und ein Browser erreichbar sein.
 
 ```powershell
-& "build\msvc2022\tools\probe\Debug\baludesk_probe.exe" pair "baluhost.duckdns.org"
+& "build\msvc2022\tools\probe\Debug\baludesk_probe.exe" pair "nas.example.com"
 ```
 
 Erwartet, in dieser Reihenfolge:
-1. `Server: https://baluhost.duckdns.org` — das fehlende Schema wurde ergänzt
+1. `Server: https://nas.example.com` — das fehlende Schema wurde ergänzt
 2. `Zertifikat regulär geprüft, kein Anheften nötig.`
 3. Ein sechsstelliger Code und die Freigabeadresse
 4. Nach der Freigabe im Browser: `Gepaart. Verbunden mit … als …`
@@ -2267,7 +2267,7 @@ Derselbe Server über den Namen, für den das Zertifikat nicht ausgestellt ist �
 
 ```powershell
 & "build\msvc2022\tools\probe\Debug\baludesk_probe.exe" logout
-& "build\msvc2022\tools\probe\Debug\baludesk_probe.exe" pair "baluhost.local"
+& "build\msvc2022\tools\probe\Debug\baludesk_probe.exe" pair "nas.local"
 ```
 
 Erwartet: der Fingerabdruck wird angezeigt und die Bestätigung abgefragt. Nach `j` erscheint `Zertifikat bestätigt und angeheftet.`, danach läuft die Paarung wie zuvor. Anschließend:
@@ -2278,7 +2278,7 @@ Erwartet: der Fingerabdruck wird angezeigt und die Bestätigung abgefragt. Nach 
 
 Erwartet: `Zertifikat: angeheftet` und wieder Status 200 — der gespeicherte Pin trägt also über einen Prozesswechsel.
 
-Prüfe außerdem, dass die Ablehnung wirkt: erneut `logout`, dann `pair "baluhost.local"` und bei der Frage `n` antworten. Erwartet: `Abgebrochen.`, Rückgabewert 1, **keine** abgelegte Sitzung.
+Prüfe außerdem, dass die Ablehnung wirkt: erneut `logout`, dann `pair "nas.local"` und bei der Frage `n` antworten. Erwartet: `Abgebrochen.`, Rückgabewert 1, **keine** abgelegte Sitzung.
 
 - [ ] **Step 7: Aufräumen und committen**
 
@@ -2308,9 +2308,9 @@ Alle sechs Punkte müssen zutreffen:
 1. Konfigurieren und Bauen ohne Fehler und ohne Warnungen aus eigenem Code
 2. `ctest --preset debug` meldet **108 bestandene Tests**, 0 fehlgeschlagen
 3. `baludesk_probe pair "http://nas.example.com"` wird abgelehnt, ohne das Netz anzufassen
-4. Eine Paarung gegen `baluhost.duckdns.org` läuft durch und endet mit `Gepaart.`
+4. Eine Paarung gegen `nas.example.com` läuft durch und endet mit `Gepaart.`
 5. `baludesk_probe status` im **neuen Prozess** meldet Status 200 — die Sitzung hat den Neustart überlebt
-6. Über `baluhost.local` wird der Fingerabdruck abgefragt, nach Bestätigung gepaart, und `status` meldet `Zertifikat: angeheftet`
+6. Über `nas.local` wird der Fingerabdruck abgefragt, nach Bestätigung gepaart, und `status` meldet `Zertifikat: angeheftet`
 
 Punkt 5 ist das Abnahmekriterium der Stufe aus Spec Abschnitt 12.
 

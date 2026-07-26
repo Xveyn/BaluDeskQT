@@ -1,0 +1,83 @@
+# Baut den Client und laesst die Testsuite laufen.
+#
+# STAND: noch nie gruen gesehen. Dieser Ablauf wurde geschrieben, aber nie auf
+# einem Laeufer ausgefuehrt - das laesst sich lokal nicht pruefen. Der erste Lauf
+# nach dem Veroeffentlichen braucht vermutlich noch ein, zwei Runden, besonders
+# beim Zusammenspiel von vcpkg und Qt. Das ist erwartet.
+#
+# Bewusst ohne Binaercache: vcpkg baut OpenSSL und curl bei jedem Lauf aus den
+# Quellen, was den Job lang macht. Der uebliche Kniff dafuer (x-gha) braucht
+# ACTIONS_CACHE_URL und ACTIONS_RUNTIME_TOKEN aus einem Hilfsschritt; das kommt
+# dazu, wenn der Ablauf erst einmal ueberhaupt durchlaeuft. Erst richtig, dann
+# schnell.
+#
+# Fremd-Actions sind auf volle Commit-SHAs festgenagelt, damit ein uebernommener
+# Tag nicht still in einen Job gelangt. Dependabot hebt sie an, siehe
+# .github/dependabot.yml.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Windows / MSVC 2022 / Qt 6.8
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+
+    steps:
+      - name: Quelltext holen
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Qt einrichten
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+        with:
+          version: "6.8.0"
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: vcpkg bereitstellen
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Konfigurieren
+        shell: pwsh
+        run: cmake --preset ci
+
+      - name: Bauen
+        shell: pwsh
+        run: cmake --build --preset ci-debug
+
+      - name: Tests
+        shell: pwsh
+        run: ctest --preset ci-debug
+
+      - name: Protokolle sichern, wenn etwas schiefging
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vcpkg-logs
+          path: |
+            build/ci/vcpkg-manifest-install.log
+            ${{ env.VCPKG_ROOT }}/buildtrees/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7

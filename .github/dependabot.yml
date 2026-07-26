@@ -1,0 +1,23 @@
+# Dependabot — nur GitHub Actions.
+#
+# Die Fremd-Actions in .github/workflows/ sind auf volle Commit-SHAs festgenagelt,
+# damit ein übernommener Upstream-Tag nicht still in einen Job gelangt. Das
+# tauscht "wanderndes Tag"-Risiko gegen "veralteter Nagel"-Risiko; diese
+# Konfiguration schließt die zweite Hälfte: Dependabot öffnet einen Pull Request,
+# sobald eine festgenagelte Action eine neue Fassung veröffentlicht, und schreibt
+# SHA und den Versionskommentar dahinter gemeinsam um.
+#
+# Nicht abgedeckt: die C++-Abhängigkeiten. Die kommen über vcpkg im
+# Manifest-Modus, und dafür gibt es kein Dependabot-Ökosystem. Sie hängen an der
+# builtin-baseline in vcpkg.json und werden von Hand angehoben.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - dependencies

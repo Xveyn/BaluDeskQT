@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sicherheitslücke melden
+    url: https://github.com/Xveyn/BaluDeskQT/security/advisories/new
+    about: Bitte nicht über ein öffentliches Issue — siehe SECURITY.md
+  - name: Frage zum Server statt zum Client
+    url: https://github.com/Xveyn/BaluHost/issues
+    about: BaluHost ist der Server, den dieser Client anspricht
+  - name: Entwurf und getroffene Entscheidungen
+    url: https://github.com/Xveyn/BaluDeskQT/blob/main/docs/superpowers/specs/2026-07-26-baludesk-qt-design.md
+    about: Vieles ist bewusst so und dort mit Begründung festgehalten

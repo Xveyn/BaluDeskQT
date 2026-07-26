@@ -1,18 +1,35 @@
 # Build-Ausgaben
 /build/
 /out/
+/install/
 
-# vcpkg im Manifest-Modus
+# vcpkg im Manifest-Modus (liegt je nach Aufruf im Wurzel- oder Build-Verzeichnis)
 /vcpkg_installed/
 
-# Persönliche CMake-Presets (Pfade, die nur lokal gelten)
+# Persönliche CMake-Presets — enthalten Pfade, die nur lokal gelten
 CMakeUserPresets.json
+CMakeSettings.json
 
-# Qt Creator / Visual Studio
+# Arbeitsordner der Planungswerkzeuge: Ledger, Briefings und Diffs einzelner
+# Läufe. Zwischenstände, keine Ergebnisse — was bleiben soll, steht in
+# docs/superpowers/. Der Ordner trägt zwar eine eigene .gitignore, aber die
+# geht mit ihm verloren; deshalb hier noch einmal ausdrücklich.
+/.superpowers/
+
+# Werkzeuge und Editoren
 *.user
 /.vs/
 /.vscode/
+/.idea/
+compile_commands.json
+/.cache/
 
 # Laufzeitdaten
 /logs/
 *.log
+*.tmp
+
+# Betriebssystem
+Thumbs.db
+desktop.ini
+.DS_Store

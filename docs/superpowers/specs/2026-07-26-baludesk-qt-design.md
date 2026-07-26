@@ -571,8 +571,8 @@ gegen öffentliche Testdienste belegt, nicht nur in Unittests behauptet:
 
 | Prüfung | Ergebnis |
 |---|---|
-| Gültiges Zertifikat (`baluhost.duckdns.org`, Let's Encrypt) | verbunden, Status 200 |
-| Name passt nicht (`baluhost.local`, dasselbe Zertifikat) | `CertificateUntrusted`, Fingerabdruck und Pin ausgelesen |
+| Gültiges Zertifikat (`nas.example.com`, Let's Encrypt) | verbunden, Status 200 |
+| Name passt nicht (`nas.local`, dasselbe Zertifikat) | `CertificateUntrusted`, Fingerabdruck und Pin ausgelesen |
 | Selbstsigniert (`self-signed.badssl.com`) | `CertificateUntrusted`, Fingerabdruck und Pin ausgelesen |
 | Unbekannte Wurzel (`untrusted-root.badssl.com`) | `CertificateUntrusted`, Fingerabdruck und Pin ausgelesen |
 | Mit dem ausgelesenen Pin verbinden | verbunden, Status 200 |
@@ -588,7 +588,7 @@ bestätigt statt nur beabsichtigt: das Zertifikat der Gegenstelle wird ausschlie
 eine erneute Nachfrage ist also unmöglich. Und eine Pin-Regel mit *leerem* Pin fällt auf
 volle Prüfung zurück statt auf gar keine.
 
-**Umgebung, die dabei sichtbar wurde:** `baluhost.duckdns.org` löst auch im Heimnetz auf
+**Umgebung, die dabei sichtbar wurde:** `nas.example.com` löst auch im Heimnetz auf
 die LAN-Adresse auf und liefert dort ein gültiges Zertifikat. Über die IP-Adresse
 antwortet der Server nur über reines HTTP auf Port 8000. Der Client sollte deshalb
 durchgängig über den Namen angesprochen werden — dann gilt Abschnitt 2.9 ohne Ausnahme.
@@ -603,13 +603,13 @@ gefahren, weil der entscheidende Schritt einen Menschen am Browser verlangt.
 | Prüfung | Ergebnis |
 |---|---|
 | `pair "http://nas.example.com"` | abgelehnt **vor** jedem Netzkontakt |
-| `pair "baluhost.duckdns.org"` | Zertifikat regulär geprüft, Code angezeigt, nach Freigabe im Browser gepaart |
+| `pair "nas.example.com"` | Zertifikat regulär geprüft, Code angezeigt, nach Freigabe im Browser gepaart |
 | Geräteliste der Web-Oberfläche | zeigt den Client als aktives Desktop-Gerät — der Server registriert selbst, ein eigener Aufruf entfällt |
 | **`status` in einem neuen Prozess** | **verbunden, `/api/auth/me` → 200** |
 | `session.json` | nur Adresse, Benutzername, Pin — **kein Token** |
 | Anmeldeinformationsspeicher | beide Token getrennt unter `BaluDesk:session/…`, gerätegebunden |
 | `logout` | Datei entfernt, Sitzung weg |
-| `pair "baluhost.local"` | Fingerabdruck abgefragt — er stimmte **zeichengenau** mit dem aus der Abnahme der Stufe 1a überein |
+| `pair "nas.local"` | Fingerabdruck abgefragt — er stimmte **zeichengenau** mit dem aus der Abnahme der Stufe 1a überein |
 | `status` danach | „Zertifikat: angeheftet", 200; der abgelegte Pin gleich dem aus 1a |
 
 Die vierte Zeile ist das Abnahmekriterium aus Abschnitt 12: **ein Neustart führt ohne

@@ -13,6 +13,19 @@
         "VCPKG_TARGET_TRIPLET": "x64-windows",
         "CMAKE_PREFIX_PATH": "F:/Qt/6.8.0/msvc2022_64"
       }
+    },
+    {
+      "name": "ci",
+      "displayName": "CI (Pfade aus der Umgebung)",
+      "description": "Wie msvc2022, aber Qt und vcpkg kommen aus VCPKG_ROOT und QT_ROOT_DIR. Für Läufer, auf denen nichts unter F: liegt.",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/ci",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_PREFIX_PATH": "$env{QT_ROOT_DIR}"
+      }
     }
   ],
   "buildPresets": [
@@ -27,6 +40,12 @@
       "displayName": "Release bauen",
       "configurePreset": "msvc2022",
       "configuration": "Release"
+    },
+    {
+      "name": "ci-debug",
+      "displayName": "Debug bauen (CI)",
+      "configurePreset": "ci",
+      "configuration": "Debug"
     }
   ],
   "testPresets": [
@@ -34,6 +53,13 @@
       "name": "debug",
       "displayName": "Tests (Debug)",
       "configurePreset": "msvc2022",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ci-debug",
+      "displayName": "Tests (CI, Debug)",
+      "configurePreset": "ci",
       "configuration": "Debug",
       "output": { "outputOnFailure": true }
     }

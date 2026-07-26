@@ -1,0 +1,25 @@
+# Zeilenenden: im Repo immer LF, im Arbeitsverzeichnis das, was die Plattform
+# erwartet. Ohne diese Angabe meldet Git unter Windows bei jedem Commit
+# "LF will be replaced by CRLF" und die Historie hängt davon ab, wer committet.
+* text=auto eol=lf
+
+# Windows-eigene Dateien brauchen CRLF, sonst brechen sie.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Shell-Skripte brauchen LF, sonst zerbricht die Shebang-Zeile unter Linux.
+*.sh text eol=lf
+
+# Binärdateien nicht anfassen.
+*.png binary
+*.ico binary
+*.pdf binary
+
+# Zertifikate der Tests sind Text, sollen aber nie umkodiert werden.
+tests/core/data/*.pem text eol=lf
+
+# Nicht in Quellarchive (git archive, GitHub-Releases) aufnehmen.
+.github/ export-ignore
+.gitattributes export-ignore
+.gitignore export-ignore
