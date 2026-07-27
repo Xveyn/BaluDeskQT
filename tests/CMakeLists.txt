@@ -69,6 +69,13 @@ target_link_libraries(baludesk_app_tests PRIVATE
     GTest::gtest_main
 )
 
+# Dieselbe Definition wie für baludesk_core_tests: die Bridge-Tests brauchen
+# ein echtes Zertifikat, damit identifyCertificate() etwas zu tun bekommt, und
+# holen es aus demselben Datenverzeichnis.
+target_compile_definitions(baludesk_app_tests PRIVATE
+    BALUDESK_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/core/data"
+)
+
 # Wie bei baludesk_core_tests: erlaubt support/FakeTransport.h als vollen Pfad
 # ab tests/ einzubinden. Die Bridge-Tests benutzen dieselben Testhilfen wie die
 # Kern-Tests - sie doppelt vorzuhalten hiesse, sie doppelt zu pflegen.

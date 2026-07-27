@@ -8,6 +8,8 @@
 #include <QString>
 #include <QTemporaryDir>
 
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -93,6 +95,39 @@ struct Fixture {
         return directory.filePath(QStringLiteral("session.json")).toStdString();
     }
 };
+
+const char* kDeviceCodeResponse = R"({
+  "device_code": "geheimer-geraetecode",
+  "user_code": "483920",
+  "verification_url": "https://nas.example.com/devices?pair=1",
+  "expires_in": 600,
+  "interval": 5
+})";
+
+const char* kApprovedResponse = R"({
+  "status": "approved",
+  "access_token": "zugangstoken",
+  "refresh_token": "erneuerungstoken",
+  "token_type": "bearer",
+  "user": {"id": 1, "username": "sven", "email": "sven@example.com", "role": "admin"}
+})";
+
+// Ein echtes Zertifikat, damit identifyCertificate() etwas zu tun bekommt.
+std::string testCertificate() {
+    const std::filesystem::path path =
+        std::filesystem::path(BALUDESK_TEST_DATA_DIR) / "test-cert-a.pem";
+    std::ifstream stream(path, std::ios::binary);
+    EXPECT_TRUE(stream.good()) << "Testdatei nicht lesbar: " << path.string();
+    return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+}
+
+TransportResult untrustedResult(std::string pem) {
+    TransportResult result;
+    result.error = HttpErrorKind::CertificateUntrusted;
+    result.detail = "self signed certificate";
+    result.peerCertificatePem = std::move(pem);
+    return result;
+}
 
 }  // namespace
 
@@ -196,4 +231,169 @@ TEST(AuthBridgeTest, LogoutSaysSoWhenSomethingRemained) {
     EXPECT_EQ(loggedOut.count(), 0);
     ASSERT_EQ(incomplete.count(), 1);
     EXPECT_FALSE(incomplete.at(0).at(0).toString().isEmpty());
+}
+
+TEST(AuthBridgeTest, RejectsABadServerUrlWithoutTouchingTheNetwork) {
+    Fixture f;
+    QSignalSpy rejected(f.bridge.get(), &AuthBridge::serverUrlRejected);
+
+    f.bridge->connectToServer(QStringLiteral("http://nas.example.com"));
+
+    // Über diese Verbindung ginge ein Zugangstoken. Die Prüfung liegt in
+    // core::checkServerUrl und greift vor jedem Netzkontakt.
+    ASSERT_EQ(rejected.count(), 1);
+    EXPECT_FALSE(rejected.at(0).at(0).toString().isEmpty());
+    EXPECT_TRUE(f.transport->calls.empty());
+}
+
+TEST(AuthBridgeTest, EmitsTheCodeWhenTheCertificateIsFine) {
+    Fixture f;
+    f.transport->queueResult(jsonResult(200, R"({"status":"ok"})"));
+    f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
+
+    QSignalSpy ready(f.bridge.get(), &AuthBridge::pairingCodeReady);
+    f.bridge->connectToServer(QStringLiteral("nas.example.com"));
+
+    ASSERT_EQ(ready.count(), 1);
+    EXPECT_EQ(ready.at(0).at(0).toString(), QStringLiteral("483920"));
+    EXPECT_EQ(ready.at(0).at(1).toString(),
+              QStringLiteral("https://nas.example.com/devices?pair=1"));
+    EXPECT_EQ(ready.at(0).at(2).toInt(), 600);
+
+    ASSERT_EQ(f.transport->calls.size(), std::size_t{2});
+    EXPECT_EQ(f.transport->calls[0].url, "https://nas.example.com/api/health");
+    EXPECT_EQ(f.transport->calls[1].url,
+              "https://nas.example.com/api/desktop-pairing/device-code");
+    // Die Gerätekennung geht so mit, wie sie hereingereicht wurde.
+    EXPECT_NE(f.transport->calls[1].request.jsonBody.find("geraet-1"), std::string::npos);
+    EXPECT_NE(f.transport->calls[1].request.jsonBody.find("Svens Rechner"), std::string::npos);
+}
+
+TEST(AuthBridgeTest, AsksForCertificateConfirmationOnAnUnknownCertificate) {
+    Fixture f;
+    f.transport->queueResult(untrustedResult(testCertificate()));
+
+    QSignalSpy confirmation(f.bridge.get(), &AuthBridge::certificateConfirmationRequired);
+    QSignalSpy ready(f.bridge.get(), &AuthBridge::pairingCodeReady);
+    f.bridge->connectToServer(QStringLiteral("nas.local"));
+
+    ASSERT_EQ(confirmation.count(), 1);
+    EXPECT_FALSE(confirmation.at(0).at(0).toString().isEmpty());
+    EXPECT_EQ(confirmation.at(0).at(1).toString(), QStringLiteral("self signed certificate"));
+    // Vor der Entscheidung wird nicht gepaart.
+    EXPECT_EQ(ready.count(), 0);
+    EXPECT_EQ(f.transport->calls.size(), std::size_t{1});
+}
+
+TEST(AuthBridgeTest, ConfirmingTheCertificatePinsItAndContinues) {
+    Fixture f;
+    f.transport->queueResult(untrustedResult(testCertificate()));
+    f.bridge->connectToServer(QStringLiteral("nas.local"));
+
+    f.transport->queueResult(jsonResult(200, R"({"status":"ok"})"));
+    f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
+
+    QSignalSpy ready(f.bridge.get(), &AuthBridge::pairingCodeReady);
+    f.bridge->confirmCertificate();
+
+    EXPECT_EQ(ready.count(), 1);
+    ASSERT_EQ(f.transport->calls.size(), std::size_t{3});
+    // Ab der erneuten Prüfung trägt jeder Aufruf die angeheftete Regel.
+    EXPECT_EQ(f.transport->calls[1].policy.mode,
+              baludesk::core::TlsPolicy::Mode::Pinned);
+    EXPECT_EQ(f.transport->calls[2].policy.mode,
+              baludesk::core::TlsPolicy::Mode::Pinned);
+}
+
+TEST(AuthBridgeTest, RejectingTheCertificateEndsTheAttempt) {
+    Fixture f;
+    f.transport->queueResult(untrustedResult(testCertificate()));
+    f.bridge->connectToServer(QStringLiteral("nas.local"));
+    const std::size_t callsBefore = f.transport->calls.size();
+
+    QSignalSpy cancelled(f.bridge.get(), &AuthBridge::pairingCancelled);
+    f.bridge->rejectCertificate();
+
+    EXPECT_EQ(cancelled.count(), 1);
+    // Nichts angeheftet, nichts gesendet.
+    EXPECT_EQ(f.transport->calls.size(), callsBefore);
+}
+
+TEST(AuthBridgeTest, StoresTheSessionOnApproval) {
+    Fixture f;
+    f.transport->queueResult(jsonResult(200, R"({"status":"ok"})"));
+    f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
+    f.bridge->connectToServer(QStringLiteral("nas.example.com"));
+
+    f.transport->queueResult(jsonResult(200, kApprovedResponse));
+
+    QSignalSpy established(f.bridge.get(), &AuthBridge::sessionEstablished);
+    f.bridge->pollNow();
+
+    ASSERT_EQ(established.count(), 1);
+    EXPECT_EQ(established.at(0).at(0).toString(), QStringLiteral("https://nas.example.com"));
+    EXPECT_EQ(established.at(0).at(1).toString(), QStringLiteral("sven"));
+
+    // Die Token liegen nachweislich in der Ablage - der Server liefert sie
+    // kein zweites Mal aus.
+    EXPECT_EQ(f.secrets->entries["session/access-token"], "zugangstoken");
+    EXPECT_EQ(f.secrets->entries["session/refresh-token"], "erneuerungstoken");
+    EXPECT_TRUE(QFile::exists(f.directory.filePath(QStringLiteral("session.json"))));
+}
+
+TEST(AuthBridgeTest, StoresTheConfirmedPinWithTheSession) {
+    Fixture f;
+    f.transport->queueResult(untrustedResult(testCertificate()));
+    f.bridge->connectToServer(QStringLiteral("nas.local"));
+    f.transport->queueResult(jsonResult(200, R"({"status":"ok"})"));
+    f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
+    f.bridge->confirmCertificate();
+
+    f.transport->queueResult(jsonResult(200, kApprovedResponse));
+    f.bridge->pollNow();
+
+    // Ohne den Pin in der Sitzung verbindet sich der Client beim nächsten
+    // Start nicht mehr - die Bestätigung wäre für einen Programmlauf gewesen.
+    baludesk::core::FileSessionRepository repository(f.sessionPath(), *f.secrets);
+    const auto stored = repository.load();
+    ASSERT_TRUE(stored.has_value());
+    EXPECT_FALSE(stored->publicKeyPin.empty());
+}
+
+TEST(AuthBridgeTest, ReportsAFailureWhenTheSessionCannotBeStored) {
+    Fixture f;
+    f.transport->queueResult(jsonResult(200, R"({"status":"ok"})"));
+    f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
+    f.bridge->connectToServer(QStringLiteral("nas.example.com"));
+
+    f.transport->queueResult(jsonResult(200, kApprovedResponse));
+    f.secrets->failOnSaveNumber = 1;
+
+    QSignalSpy failed(f.bridge.get(), &AuthBridge::pairingFailed);
+    QSignalSpy established(f.bridge.get(), &AuthBridge::sessionEstablished);
+    f.bridge->pollNow();
+
+    // Der Server hat seinen Datensatz beim Ausliefern gelöscht. Was hier
+    // verlorengeht, ist endgültig verloren - das gehört gesagt, nicht
+    // verschwiegen.
+    EXPECT_EQ(established.count(), 0);
+    ASSERT_EQ(failed.count(), 1);
+    EXPECT_FALSE(failed.at(0).at(0).toString().isEmpty());
+}
+
+TEST(AuthBridgeTest, CancelDuringPollingStopsTheAttempt) {
+    Fixture f;
+    f.transport->queueResult(jsonResult(200, R"({"status":"ok"})"));
+    f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
+    f.bridge->connectToServer(QStringLiteral("nas.example.com"));
+    const std::size_t callsBefore = f.transport->calls.size();
+
+    QSignalSpy cancelled(f.bridge.get(), &AuthBridge::pairingCancelled);
+    f.bridge->cancelPairing();
+
+    EXPECT_EQ(cancelled.count(), 1);
+
+    // Nach dem Abbruch fragt auch ein Abfrageschritt nicht mehr nach.
+    f.bridge->pollNow();
+    EXPECT_EQ(f.transport->calls.size(), callsBefore);
 }

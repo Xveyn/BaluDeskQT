@@ -6,9 +6,13 @@
 #include <memory>
 #include <string>
 
+#include "core/api/TrustNegotiation.h"
 #include "core/auth/AuthenticatedClient.h"
+#include "core/auth/PairingClient.h"
 #include "core/auth/SessionRepository.h"
 #include "core/util/SecretStore.h"
+
+class QTimer;
 
 namespace baludesk::core {
 class HttpClient;
@@ -55,6 +59,27 @@ public slots:
     // reauthRequired, certificateChanged oder serverUnreachable.
     void restoreSession();
 
+    // Adresse prüfen, Vertrauen klären, Paarung beginnen.
+    void connectToServer(const QString& rawUrl);
+
+    // Nach certificateConfirmationRequired: den gezeigten Schlüssel anheften
+    // und weitermachen.
+    void confirmCertificate();
+
+    // Nach certificateConfirmationRequired: nichts anheften, Vorgang beenden.
+    void rejectCertificate();
+
+    // Während der Codeanzeige: Vorgang beenden. Der Gerätecode verfällt beim
+    // Server von selbst, es ist nichts zurückzunehmen.
+    void cancelPairing();
+
+    // Ein Abfrageschritt. Wird vom Zeitgeber aufgerufen.
+    //
+    // Öffentlich, damit die Tests den Ablauf ohne Ereignisschleife fahren
+    // können - sonst wäre dieser Schritt nur über echte verstreichende
+    // Sekunden erreichbar, und die Abfragefolge bliebe ungeprüft.
+    void pollNow();
+
     // Sitzung entfernen. Meldet loggedOut oder logoutIncomplete.
     void logout();
 
@@ -73,10 +98,20 @@ signals:
     void loggedOut();
     void logoutIncomplete(const QString& message);
 
-    // Die Signale des Paarungsablaufs kommen in Task 6 dazu, gemeinsam mit
-    // den Slots, die sie melden.
+    void serverUrlRejected(const QString& message);
+    void certificateConfirmationRequired(const QString& fingerprint, const QString& reason);
+    void pairingCodeReady(const QString& userCode,
+                          const QString& verificationUrl,
+                          int expiresInSeconds);
+    void pairingNotice(const QString& message);
+    void pairingFailed(const QString& message);
+    void pairingCancelled();
 
 private:
+    void beginPairing();
+    void finishPairing();
+    void resetPairing();
+
     std::shared_ptr<core::Transport> transport_;
 
     // REIHENFOLGE IST TRAGEND: FileSessionRepository hält eine SecretStore&.
@@ -86,16 +121,17 @@ private:
     std::unique_ptr<core::SecretStore> secrets_;
     std::unique_ptr<core::SessionRepository> repository_;
 
-    // Werden erst in Task 6 gelesen; der Konstruktor nimmt sie schon hier
-    // entgegen, weil er sonst in Task 6 seine Signatur ändern müsste.
     QString deviceId_;
     QString deviceName_;
 
     std::unique_ptr<core::HttpClient> http_;
     std::unique_ptr<core::AuthenticatedClient> authenticated_;
 
-    // trust_, pairing_, pollTimer_ und pendingServerUrl_ kommen in Task 6
-    // dazu.
+    std::unique_ptr<core::TrustNegotiation> trust_;
+    std::unique_ptr<core::PairingClient> pairing_;
+
+    QTimer* pollTimer_ = nullptr;
+    QString pendingServerUrl_;
 };
 
 }  // namespace baludesk::bridge
