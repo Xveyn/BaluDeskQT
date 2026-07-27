@@ -5,6 +5,7 @@
 #include "app/MainWindow.h"
 #include "app/QtLogBridge.h"
 #include "app/SettingsStore.h"
+#include "core/auth/SessionPaths.h"
 #include "core/util/AppConfig.h"
 #include "core/util/Logger.h"
 
@@ -38,6 +39,7 @@ int main(int argc, char* argv[]) {
     baludesk::core::Logger::info("BaluDesk {} gestartet",
                                  QCoreApplication::applicationVersion().toStdString());
     baludesk::core::Logger::info("Abfrageintervall: {} s", config.pollIntervalSeconds);
+    baludesk::core::Logger::info("Sitzungsablage: {}", baludesk::core::defaultSessionPath());
 
     baludesk::app::MainWindow window;
     window.show();
