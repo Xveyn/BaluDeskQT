@@ -64,12 +64,14 @@ TrustState TrustNegotiation::evaluate() {
 
     if (result.error == HttpErrorKind::Network || result.error == HttpErrorKind::Timeout) {
         Logger::debug("Vertrauen: Server nicht erreichbar — {}", result.detail);
+        prompt_.reset();
         return settle(TrustState::Unreachable,
                       "Der Server ist nicht erreichbar: " + result.detail);
     }
 
     if (result.error != HttpErrorKind::None) {
         Logger::warn("Vertrauen: Verbindung unbrauchbar — {}", result.detail);
+        prompt_.reset();
         return settle(TrustState::Failed,
                       "Die Verbindung zum Server ist unbrauchbar: " + result.detail);
     }
@@ -77,6 +79,7 @@ TrustState TrustNegotiation::evaluate() {
     if (!result.ok()) {
         // Die Verbindung steht, aber am anderen Ende antwortet kein BaluHost.
         Logger::warn("Vertrauen: unerwarteter Status {} auf {}", result.statusCode, kHealthPath);
+        prompt_.reset();
         return settle(TrustState::Failed,
                       "Unter dieser Adresse antwortet kein BaluHost-Server (Status " +
                           std::to_string(result.statusCode) + ").");
@@ -115,12 +118,22 @@ TrustState TrustNegotiation::confirm() {
         // CertificateUntrusted (belegt in der Abnahme der Stufe 1a). Der
         // Zweig steht hier, damit ein künftiger Umbau des Transports nicht
         // still in einer Endlosschleife aus Nachfragen landet.
+        http_.setTlsPolicy(TlsPolicy{});
         prompt_.reset();
         return settle(TrustState::Failed,
                       "Das Zertifikat ließ sich auch nach der Bestätigung nicht prüfen.");
     }
 
-    // Nicht bestätigt: der Pin bleibt ungesetzt.
+    // Nicht bestätigt: der Pin bleibt ungesetzt, und die Regel geht auf volle
+    // Prüfung zurück. Das ist kein Verlust einer vorher gesetzten Regel:
+    // confirm() ist ausschließlich nach ConfirmationRequired wirksam, und
+    // dieser Zustand entsteht nur aus CertificateUntrusted - im gepinnten
+    // Modus meldet der Transport eine Abweichung als CertificatePinMismatch,
+    // nie als CertificateUntrusted (siehe oben). Der HttpClient stand vor
+    // diesem Aufruf also immer auf SystemTrust. Bliebe die eben gesetzte,
+    // nie bestätigte Regel stehen, wäre eine spätere Prüfung über dasselbe
+    // Paar gegen einen Schlüssel gerichtet, dem nie jemand zugestimmt hat.
+    http_.setTlsPolicy(TlsPolicy{});
     confirmedPin_.clear();
     return result;
 }

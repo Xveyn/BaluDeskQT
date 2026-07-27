@@ -206,3 +206,37 @@ TEST(TrustNegotiationTest, ConfirmKeepsNoPinWhenTheCheckStillFails) {
     // erzeugen, die niemand mehr zuordnen kann.
     EXPECT_TRUE(f.trust->confirmedPin().empty());
 }
+
+TEST(TrustNegotiationTest, ConfirmReleasesThePinnedPolicyWhenTheCheckFails) {
+    Fixture f;
+    f.transport->queueResult(untrustedResult(testCertificate()));
+    ASSERT_EQ(f.trust->probe(), TrustState::ConfirmationRequired);
+
+    f.transport->queueResult(failure(HttpErrorKind::Network, "connection reset"));
+    ASSERT_EQ(f.trust->confirm(), TrustState::Unreachable);
+
+    // Der HttpClient gehört der Klasse nicht und überlebt sie. Bliebe er auf
+    // einem nie bestätigten Schlüssel stehen, wäre jede spätere Prüfung über
+    // dieses Paar gegen ein Zertifikat gerichtet, dem nie jemand zugestimmt hat.
+    f.transport->queueResult(okResult());
+    ASSERT_EQ(f.trust->probe(), TrustState::Trusted);
+
+    const auto& lastCall = f.transport->calls.back();
+    EXPECT_EQ(lastCall.policy.mode, TlsPolicy::Mode::SystemTrust);
+    EXPECT_TRUE(lastCall.policy.publicKeyPin.empty());
+}
+
+TEST(TrustNegotiationTest, ForgetsThePromptWhenTheServerBecomesUnreachable) {
+    Fixture f;
+    f.transport->queueResult(untrustedResult(testCertificate()));
+    ASSERT_EQ(f.trust->probe(), TrustState::ConfirmationRequired);
+    ASSERT_TRUE(f.trust->prompt().has_value());
+
+    f.transport->queueResult(failure(HttpErrorKind::Network, "connection reset"));
+    ASSERT_EQ(f.trust->confirm(), TrustState::Unreachable);
+
+    // Ein belegtes prompt_ gehört ausschliesslich zu ConfirmationRequired.
+    // Sonst zeigt der Dialog eine Zertifikatsnachfrage für einen Server, der
+    // gerade nur nicht erreichbar ist.
+    EXPECT_FALSE(f.trust->prompt().has_value());
+}

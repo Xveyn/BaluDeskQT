@@ -61,7 +61,10 @@ public:
     //
     // Der Pin gilt erst dann als bestätigt, wenn die erneute Prüfung
     // Trusted ergibt - ein Pin, der nie zu einer stehenden Verbindung
-    // geführt hat, gehört nicht in die Sitzung.
+    // geführt hat, gehört nicht in die Sitzung. Scheitert die erneute
+    // Prüfung, wird die TLS-Regel des HttpClient auf volle Prüfung
+    // zurückgesetzt statt auf dem eben angehefteten, nie bestätigten
+    // Schlüssel stehen zu bleiben.
     TrustState confirm();
 
     [[nodiscard]] const std::optional<TrustPrompt>& prompt() const { return prompt_; }
