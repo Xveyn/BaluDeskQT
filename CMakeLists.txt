@@ -22,6 +22,7 @@ enable_testing()
 option(BALUDESK_BUILD_TOOLS "tools/probe mitbauen" ON)
 
 add_subdirectory(src/core)
+add_subdirectory(src/bridge)
 add_subdirectory(src/app)
 add_subdirectory(tests)
 if(BALUDESK_BUILD_TOOLS)

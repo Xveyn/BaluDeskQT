@@ -6,7 +6,7 @@ include(GoogleTest)
 # verzeichnisgebunden, und tests/ ist ein Geschwisterverzeichnis von
 # src/app, kein Nachfahre — Qt6::Core ist hier sonst schlicht unsichtbar.
 # Ohne diese Zeile scheitert das get_target_property() weiter unten.
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Test)
 
 # Schaltet AUTOMOC für dieses Verzeichnis ein, bevor irgendein Test es
 # braucht. qt_standard_project_setup() wird in src/app/CMakeLists.txt
@@ -59,13 +59,20 @@ gtest_discover_tests(baludesk_core_tests)
 add_executable(baludesk_app_tests
     app/settings_store_test.cpp
     app/qt_log_bridge_test.cpp
+    bridge/auth_bridge_test.cpp
 )
 
 target_link_libraries(baludesk_app_tests PRIVATE
     baludesk_app_lib
+    Qt6::Test
     GTest::gtest
     GTest::gtest_main
 )
+
+# Wie bei baludesk_core_tests: erlaubt support/FakeTransport.h als vollen Pfad
+# ab tests/ einzubinden. Die Bridge-Tests benutzen dieselben Testhilfen wie die
+# Kern-Tests - sie doppelt vorzuhalten hiesse, sie doppelt zu pflegen.
+target_include_directories(baludesk_app_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 get_target_property(_qt_core_location Qt6::Core IMPORTED_LOCATION_RELEASE)
 if(NOT _qt_core_location)

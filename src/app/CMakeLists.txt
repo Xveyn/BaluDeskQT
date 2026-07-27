@@ -9,7 +9,7 @@ add_library(baludesk_app_lib STATIC
 )
 
 target_include_directories(baludesk_app_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_link_libraries(baludesk_app_lib PUBLIC Qt6::Widgets baludesk_core)
+target_link_libraries(baludesk_app_lib PUBLIC Qt6::Widgets baludesk_core baludesk_bridge)
 
 qt_add_executable(baludesk
     main.cpp
