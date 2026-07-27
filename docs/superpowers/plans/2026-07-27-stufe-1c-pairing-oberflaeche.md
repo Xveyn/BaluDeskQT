@@ -3879,6 +3879,13 @@ ConnectedPage::ConnectedPage(QWidget* parent) : QWidget(parent) {
 }
 
 void ConnectedPage::showConnection(const QString& serverUrl, const QString& username) {
+    // Den eigenen Nebenzustand mit zurücksetzen: sonst steht ein alter
+    // Offline-Hinweis beim Wiedereintritt unter der frischen
+    // Verbindungszeile. Die Seite gehört sich selbst - ein Hinweis, den
+    // niemand mehr verantworten kann, ist schlimmer als keiner. Dass die
+    // Verdrahtung in Task 8 zusätzlich clearOffline() ruft, ist doppelt
+    // gemoppelt und schadet nicht.
+    clearOffline();
     connection_->setText(tr("Verbunden mit %1 als %2").arg(serverUrl, username));
 }
 
