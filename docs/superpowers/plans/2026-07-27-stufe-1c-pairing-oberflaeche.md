@@ -28,7 +28,7 @@ Beim Ausschreiben der Schnittstellen kamen zwei Stellen ans Licht, an denen die 
 - **`baludesk_core` darf niemals Qt linken.** Kein `QString`, kein `QObject`, kein Qt-Header unter `src/core/`. Die Absicherung steht in der Wurzel-`CMakeLists.txt` nach `add_subdirectory(tests)` und bricht mit `FATAL_ERROR` ab.
 - **`src/bridge/` darf Qt kennen, aber keine Widgets.** `baludesk_bridge` linkt `Qt6::Core`, nicht `Qt6::Widgets`. Ein Dialog gehört nach `src/app/`.
 - **Namensräume:** `baludesk::core` für `src/core/`, `baludesk::bridge` für `src/bridge/`, `baludesk::app` für `src/app/`
-- **Include-Pfade immer vollständig ab `src/`** — `#include "core/auth/PairingClient.h"`, nie relativ mit `../`. In Tests ebenso ab `tests/`: `#include "support/FakeTransport.h"`.
+- **Include-Pfade immer vollständig ab `src/`** — `#include "core/auth/PairingClient.h"`, nie relativ mit `../`. In Tests ebenso ab `tests/`: aus `tests/core/` heisst das `#include "support/FakeTransport.h"`, aus `tests/bridge/` dagegen `#include "core/support/FakeTransport.h"` — ein Include in Anfuehrungszeichen sucht zuerst neben der einbindenden Datei.
 - **Sprache:** Bezeichner und Dateinamen englisch, Kommentare und Protokolltexte deutsch
 - **Umlaute:** echte UTF-8-Zeichen (`ü`, `ö`, `ä`, `ß`), Dateien als UTF-8 **ohne BOM**. Keine Behelfsschreibung. **Einzige Ausnahme: Git-Commit-Nachrichten bleiben ASCII**, weil PowerShell-5.1-Here-Strings Umlaute verstümmeln.
 - **Generator:** `Visual Studio 17 2022`, x64. Warnungen `/W4 /permissive- /utf-8`, **keine Warnungen aus eigenem Code**.
@@ -2099,8 +2099,8 @@ Datei `tests/bridge/auth_bridge_test.cpp`:
 #include <utility>
 
 #include "core/api/HttpTypes.h"
-#include "support/FakeSecretStore.h"
-#include "support/FakeTransport.h"
+#include "core/support/FakeSecretStore.h"
+#include "core/support/FakeTransport.h"
 
 using baludesk::bridge::AuthBridge;
 using baludesk::core::HttpErrorKind;
@@ -2314,9 +2314,12 @@ target_link_libraries(baludesk_app_tests PRIVATE
     GTest::gtest_main
 )
 
-# Wie bei baludesk_core_tests: erlaubt support/FakeTransport.h als vollen Pfad
-# ab tests/ einzubinden. Die Bridge-Tests benutzen dieselben Testhilfen wie die
-# Kern-Tests - sie doppelt vorzuhalten hiesse, sie doppelt zu pflegen.
+# Erlaubt core/support/FakeTransport.h als vollen Pfad ab tests/ einzubinden.
+# Der kuerzere Pfad "support/..." der Kern-Tests traegt hier NICHT: ein Include
+# in Anfuehrungszeichen sucht zuerst neben der einbindenden Datei, und das ist
+# fuer tests/bridge/ ein anderes Verzeichnis. Die Bridge-Tests benutzen
+# dieselben Testhilfen wie die Kern-Tests - sie doppelt vorzuhalten hiesse,
+# sie doppelt zu pflegen.
 target_include_directories(baludesk_app_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 ```
 
@@ -2597,6 +2600,7 @@ Arbeiterthread wird damit zum Uebersetzungsfehler statt zum Laufzeitfehler.
 - Modify: `src/bridge/AuthBridge.h` (Slots, Signale und Mitglieder des Paarungsablaufs ergänzen)
 - Modify: `src/bridge/AuthBridge.cpp` (die zugehörigen Rümpfe ergänzen)
 - Test: `tests/bridge/auth_bridge_test.cpp` (ergänzen)
+- Modify: `tests/CMakeLists.txt` (`BALUDESK_TEST_DATA_DIR` auch für `baludesk_app_tests`)
 
 **Interfaces:**
 - Consumes: `TrustNegotiation` (Task 1), `PairingClient`, `checkServerUrl`, `FileSessionRepository::save`, `AuthenticatedClient` (Task 3), sowie die in Task 5 entstandene `AuthBridge` samt Konstruktor, `repository_`, `transport_`, `http_`, `authenticated_`, `deviceId_`, `deviceName_`
@@ -2648,6 +2652,17 @@ TransportResult untrustedResult(std::string pem) {
 ```
 
 Dazu oben `#include <filesystem>` und `#include <fstream>` ergänzen.
+
+**`BALUDESK_TEST_DATA_DIR` fehlt diesem Ziel noch.** Die Konstante ist bisher nur für `baludesk_core_tests` definiert; `testCertificate()` liegt aber in `tests/bridge/` und gehört zu `baludesk_app_tests`. Ohne diese Ergänzung scheitert schon das Übersetzen. In `tests/CMakeLists.txt`, unmittelbar vor `target_include_directories(baludesk_app_tests ...)`, einfügen:
+
+```cmake
+# Dieselbe Definition wie für baludesk_core_tests: die Bridge-Tests brauchen
+# ein echtes Zertifikat, damit identifyCertificate() etwas zu tun bekommt, und
+# holen es aus demselben Datenverzeichnis.
+target_compile_definitions(baludesk_app_tests PRIVATE
+    BALUDESK_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/core/data"
+)
+```
 
 Und die Tests:
 
