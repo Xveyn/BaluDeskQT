@@ -1955,9 +1955,16 @@ Die einzige Stelle im Programm, an der beide Welten sich berühren (Spec Abschni
 - Produces:
   - `class baludesk::bridge::AuthBridge : public QObject` mit dem Konstruktor
     `AuthBridge(std::shared_ptr<core::Transport> transport, std::unique_ptr<core::SecretStore> secrets, std::string sessionPath, QString deviceId, QString deviceName, QObject* parent = nullptr)`
-  - Slots: `restoreSession()`, `connectToServer(const QString&)`, `confirmCertificate()`, `rejectCertificate()`, `cancelPairing()`, `pollNow()`, `logout()`
-  - Signale: `noSession()`, `sessionEstablished(QString, QString)`, `serverUnreachable(QString)`, `serverUrlRejected(QString)`, `certificateConfirmationRequired(QString, QString)`, `certificateChanged(QString, QString)`, `pairingCodeReady(QString, QString, int)`, `pairingNotice(QString)`, `pairingFailed(QString)`, `pairingCancelled()`, `reauthRequired(QString)`, `loggedOut()`, `logoutIncomplete(QString)`
+  - Slots: `restoreSession()`, `logout()`
+  - Signale: `noSession()`, `sessionEstablished(QString, QString)`, `serverUnreachable(QString)`, `certificateChanged(QString, QString)`, `reauthRequired(QString)`, `loggedOut()`, `logoutIncomplete(QString)`
   - CMake-Ziel `baludesk_bridge`
+
+**Was bewusst NICHT in diesem Task entsteht:** die Paarungs-Slots und
+-Signale. Sie werden in Task 6 **zusammen mit ihrem Inhalt** eingefügt —
+Deklaration und Rumpf in einem Zug. Ein Header, der schon sieben Methoden
+verspricht, deren Rümpfe leer sind, ist toter Code, und zwar auch dann, wenn
+der nächste Task ihn füllt. `deviceId_` und `deviceName_` liegen dagegen
+bereits hier, weil der Konstruktor sie entgegennimmt.
 
 ---
 
@@ -2321,27 +2328,6 @@ public slots:
     // reauthRequired, certificateChanged oder serverUnreachable.
     void restoreSession();
 
-    // Adresse prüfen, Vertrauen klären, Paarung beginnen.
-    void connectToServer(const QString& rawUrl);
-
-    // Nach certificateConfirmationRequired: den gezeigten Schlüssel anheften
-    // und weitermachen.
-    void confirmCertificate();
-
-    // Nach certificateConfirmationRequired: nichts anheften, Vorgang beenden.
-    void rejectCertificate();
-
-    // Während der Codeanzeige: Vorgang beenden. Der Gerätecode verfällt beim
-    // Server von selbst, es ist nichts zurückzunehmen.
-    void cancelPairing();
-
-    // Ein Abfrageschritt. Wird vom Zeitgeber aufgerufen.
-    //
-    // Öffentlich, damit die Tests den Ablauf ohne Ereignisschleife fahren
-    // können - sonst wäre dieser Schritt nur über echte verstreichende
-    // Sekunden erreichbar, und die Abfragefolge bliebe ungeprüft.
-    void pollNow();
-
     // Sitzung entfernen. Meldet loggedOut oder logoutIncomplete.
     void logout();
 
@@ -2349,8 +2335,6 @@ signals:
     void noSession();
     void sessionEstablished(const QString& serverUrl, const QString& username);
     void serverUnreachable(const QString& message);
-    void serverUrlRejected(const QString& message);
-    void certificateConfirmationRequired(const QString& fingerprint, const QString& reason);
 
     // Der angeheftete Schlüssel passt nicht mehr, oder ein Zertifikat ohne
     // Pin lässt sich nicht mehr prüfen. Beides endet auf derselben Seite,
@@ -2358,21 +2342,14 @@ signals:
     // Argument.
     void certificateChanged(const QString& serverUrl, const QString& reason);
 
-    void pairingCodeReady(const QString& userCode,
-                          const QString& verificationUrl,
-                          int expiresInSeconds);
-    void pairingNotice(const QString& message);
-    void pairingFailed(const QString& message);
-    void pairingCancelled();
     void reauthRequired(const QString& message);
     void loggedOut();
     void logoutIncomplete(const QString& message);
 
-private:
-    void beginPairing();
-    void finishPairing();
-    void resetPairing();
+    // Die Signale des Paarungsablaufs kommen in Task 6 dazu, gemeinsam mit
+    // den Slots, die sie melden.
 
+private:
     std::shared_ptr<core::Transport> transport_;
 
     // REIHENFOLGE IST TRAGEND: FileSessionRepository hält eine SecretStore&.
@@ -2382,19 +2359,35 @@ private:
     std::unique_ptr<core::SecretStore> secrets_;
     std::unique_ptr<core::SessionRepository> repository_;
 
+    // Werden erst in Task 6 gelesen; der Konstruktor nimmt sie schon hier
+    // entgegen, weil er sonst in Task 6 seine Signatur ändern müsste.
     QString deviceId_;
     QString deviceName_;
 
     std::unique_ptr<core::HttpClient> http_;
-    std::unique_ptr<core::TrustNegotiation> trust_;
-    std::unique_ptr<core::PairingClient> pairing_;
     std::unique_ptr<core::AuthenticatedClient> authenticated_;
 
-    QTimer* pollTimer_ = nullptr;
-    QString pendingServerUrl_;
+    // trust_, pairing_, pollTimer_ und pendingServerUrl_ kommen in Task 6
+    // dazu.
 };
 
 }  // namespace baludesk::bridge
+```
+
+Die Includes für `TrustNegotiation.h` und `PairingClient.h` und die
+Vorwärtsdeklaration von `QTimer` gehören zu diesen Mitgliedern und kommen
+deshalb ebenfalls erst in Task 6 dazu. In diesem Task lautet der Include-Block:
+
+```cpp
+#include <QObject>
+#include <QString>
+
+#include <memory>
+#include <string>
+
+#include "core/auth/AuthenticatedClient.h"
+#include "core/auth/SessionRepository.h"
+#include "core/util/SecretStore.h"
 ```
 
 - [ ] **Step 8: `src/bridge/AuthBridge.cpp` schreiben — Konstruktor, Wiederherstellen, Abmelden**
@@ -2404,28 +2397,14 @@ Das Paaren bleibt in diesem Task bewusst leer und kommt in Task 6 dazu.
 ```cpp
 #include "bridge/AuthBridge.h"
 
-#include <QTimer>
-
-#include <chrono>
-#include <cstdint>
 #include <utility>
 
 #include "core/api/HttpClient.h"
-#include "core/api/ServerUrl.h"
 #include "core/api/TlsPolicy.h"
 #include "core/auth/FileSessionRepository.h"
 #include "core/util/Logger.h"
 
 namespace baludesk::bridge {
-namespace {
-
-std::int64_t nowSeconds() {
-    return std::chrono::duration_cast<std::chrono::seconds>(
-               std::chrono::steady_clock::now().time_since_epoch())
-        .count();
-}
-
-}  // namespace
 
 AuthBridge::AuthBridge(std::shared_ptr<core::Transport> transport,
                        std::unique_ptr<core::SecretStore> secrets,
@@ -2440,22 +2419,9 @@ AuthBridge::AuthBridge(std::shared_ptr<core::Transport> transport,
       deviceName_(std::move(deviceName)) {
     repository_ =
         std::make_unique<core::FileSessionRepository>(std::move(sessionPath), *secrets_);
-
-    // Mit this als Eltern: der Zeitgeber wandert bei einem moveToThread mit
-    // und gehört danach demselben Thread wie alles Übrige.
-    pollTimer_ = new QTimer(this);
-    pollTimer_->setSingleShot(true);
-    connect(pollTimer_, &QTimer::timeout, this, &AuthBridge::pollNow);
 }
 
 AuthBridge::~AuthBridge() = default;
-
-void AuthBridge::resetPairing() {
-    pollTimer_->stop();
-    pairing_.reset();
-    trust_.reset();
-    pendingServerUrl_.clear();
-}
 
 void AuthBridge::restoreSession() {
     const auto session = repository_->load();
@@ -2516,7 +2482,6 @@ void AuthBridge::logout() {
 
     authenticated_.reset();
     http_.reset();
-    resetPairing();
 
     if (complete) {
         emit loggedOut();
@@ -2528,28 +2493,10 @@ void AuthBridge::logout() {
            "Bitte im Anmeldeinformationsspeicher unter „BaluDesk“ nachsehen."));
 }
 
-// --- Paaren: kommt in Task 6 -------------------------------------------
-
-void AuthBridge::connectToServer(const QString& rawUrl) {
-    Q_UNUSED(rawUrl);
-}
-
-void AuthBridge::confirmCertificate() {}
-
-void AuthBridge::rejectCertificate() {}
-
-void AuthBridge::cancelPairing() {}
-
-void AuthBridge::pollNow() {}
-
-void AuthBridge::beginPairing() {}
-
-void AuthBridge::finishPairing() {}
-
 }  // namespace baludesk::bridge
 ```
 
-`nowSeconds()` ist in diesem Task noch ungenutzt und würde als Warnung auffallen. Damit der Build warnungsfrei bleibt, die Funktion erst in Task 6 einfügen — hier stattdessen weglassen und in Task 6 mit dem ersten Aufrufer nachziehen. Ebenso `#include <chrono>`, `#include <cstdint>` und `#include "core/api/ServerUrl.h"`.
+Das ist die vollständige Datei für diesen Task — kein Platzhalter, keine leere Methode. Der Paarungsablauf kommt in Task 6 mit seinen Deklarationen zusammen dazu.
 
 - [ ] **Step 9: Tests laufen lassen und grün bestätigen**
 
@@ -2582,12 +2529,17 @@ Arbeiterthread wird damit zum Uebersetzungsfehler statt zum Laufzeitfehler.
 ## Task 6: AuthBridge — Paaren
 
 **Files:**
-- Modify: `src/bridge/AuthBridge.cpp` (die sieben leeren Methoden aus Task 5 füllen)
+- Modify: `src/bridge/AuthBridge.h` (Slots, Signale und Mitglieder des Paarungsablaufs ergänzen)
+- Modify: `src/bridge/AuthBridge.cpp` (die zugehörigen Rümpfe ergänzen)
 - Test: `tests/bridge/auth_bridge_test.cpp` (ergänzen)
 
 **Interfaces:**
-- Consumes: `TrustNegotiation` (Task 1), `PairingClient`, `checkServerUrl`, `FileSessionRepository::save`, `AuthenticatedClient` (Task 3)
-- Produces: keine neuen Typen — füllt die in Task 5 deklarierten Slots und Signale mit Verhalten
+- Consumes: `TrustNegotiation` (Task 1), `PairingClient`, `checkServerUrl`, `FileSessionRepository::save`, `AuthenticatedClient` (Task 3), sowie die in Task 5 entstandene `AuthBridge` samt Konstruktor, `repository_`, `transport_`, `http_`, `authenticated_`, `deviceId_`, `deviceName_`
+- Produces:
+  - Slots: `connectToServer(const QString&)`, `confirmCertificate()`, `rejectCertificate()`, `cancelPairing()`, `pollNow()`
+  - Signale: `serverUrlRejected(QString)`, `certificateConfirmationRequired(QString, QString)`, `pairingCodeReady(QString, QString, int)`, `pairingNotice(QString)`, `pairingFailed(QString)`, `pairingCancelled()`
+
+**Jede Methode entsteht mit ihrem Inhalt.** Deklaration und Rumpf gehören in denselben Task — ein Header, der Methoden verspricht, deren Rümpfe leer sind, ist toter Code, auch wenn ein späterer Task ihn füllt.
 
 ---
 
@@ -2808,34 +2760,134 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: die neun neuen Tests scheitern (die Slots aus Task 5 tun nichts), die 164 vorhandenen bleiben grün.
+Erwartet: FEHLER beim Übersetzen — `'connectToServer': is not a member of 'baludesk::bridge::AuthBridge'` und dieselbe Meldung für die übrigen vier Slots. Die Slots gibt es noch nicht; sie entstehen in Step 3 und 4 zusammen mit ihren Rümpfen.
 
-- [ ] **Step 3: Die Include- und Hilfsfunktionsergänzung in `AuthBridge.cpp` nachziehen**
+- [ ] **Step 3: `src/bridge/AuthBridge.h` um den Paarungsablauf erweitern**
 
-Oben in `src/bridge/AuthBridge.cpp` ergänzen:
+**a)** Den Include-Block ergänzen — die neuen Mitglieder brauchen ihre Typen:
 
 ```cpp
+#include "core/api/TrustNegotiation.h"
+#include "core/auth/PairingClient.h"
+```
+
+und vor `namespace baludesk::core` die Vorwärtsdeklaration:
+
+```cpp
+class QTimer;
+```
+
+**b)** In `public slots:` hinter `restoreSession()` und vor `logout()` einfügen:
+
+```cpp
+    // Adresse prüfen, Vertrauen klären, Paarung beginnen.
+    void connectToServer(const QString& rawUrl);
+
+    // Nach certificateConfirmationRequired: den gezeigten Schlüssel anheften
+    // und weitermachen.
+    void confirmCertificate();
+
+    // Nach certificateConfirmationRequired: nichts anheften, Vorgang beenden.
+    void rejectCertificate();
+
+    // Während der Codeanzeige: Vorgang beenden. Der Gerätecode verfällt beim
+    // Server von selbst, es ist nichts zurückzunehmen.
+    void cancelPairing();
+
+    // Ein Abfrageschritt. Wird vom Zeitgeber aufgerufen.
+    //
+    // Öffentlich, damit die Tests den Ablauf ohne Ereignisschleife fahren
+    // können - sonst wäre dieser Schritt nur über echte verstreichende
+    // Sekunden erreichbar, und die Abfragefolge bliebe ungeprüft.
+    void pollNow();
+```
+
+**c)** Im `signals:`-Abschnitt den Hinweiskommentar „Die Signale des Paarungsablaufs kommen in Task 6 dazu…" durch die Signale selbst ersetzen:
+
+```cpp
+    void serverUrlRejected(const QString& message);
+    void certificateConfirmationRequired(const QString& fingerprint, const QString& reason);
+    void pairingCodeReady(const QString& userCode,
+                          const QString& verificationUrl,
+                          int expiresInSeconds);
+    void pairingNotice(const QString& message);
+    void pairingFailed(const QString& message);
+    void pairingCancelled();
+```
+
+**d)** Im `private:`-Abschnitt die drei Hilfsmethoden ganz oben ergänzen:
+
+```cpp
+    void beginPairing();
+    void finishPairing();
+    void resetPairing();
+```
+
+und den Kommentar „trust_, pairing_, pollTimer_ und pendingServerUrl_ kommen in Task 6 dazu." durch die Mitglieder selbst ersetzen:
+
+```cpp
+    std::unique_ptr<core::TrustNegotiation> trust_;
+    std::unique_ptr<core::PairingClient> pairing_;
+
+    QTimer* pollTimer_ = nullptr;
+    QString pendingServerUrl_;
+```
+
+Ebenso den Kommentar bei `deviceId_`/`deviceName_` („Werden erst in Task 6 gelesen…") entfernen — ab jetzt werden sie gelesen.
+
+- [ ] **Step 4: `src/bridge/AuthBridge.cpp` erweitern**
+
+**a)** Den Include-Block ergänzen:
+
+```cpp
+#include <QTimer>
+
 #include <chrono>
 #include <cstdint>
 
 #include "core/api/ServerUrl.h"
 ```
 
-Und im anonymen Namensraum:
+**b)** Vor `AuthBridge::AuthBridge` einen anonymen Namensraum einfügen:
 
 ```cpp
+namespace {
+
 std::int64_t nowSeconds() {
     return std::chrono::duration_cast<std::chrono::seconds>(
                std::chrono::steady_clock::now().time_since_epoch())
         .count();
 }
+
+}  // namespace
 ```
 
-- [ ] **Step 4: Die sieben leeren Methoden ersetzen**
-
-Den Block ab `// --- Paaren: kommt in Task 6 ---` bis zum schliessenden Namensraum durch dies ersetzen:
+**c)** Im Konstruktor, hinter der Zuweisung an `repository_`, den Zeitgeber anlegen:
 
 ```cpp
+    // Mit this als Eltern: der Zeitgeber wandert bei einem moveToThread mit
+    // und gehört danach demselben Thread wie alles Übrige.
+    pollTimer_ = new QTimer(this);
+    pollTimer_->setSingleShot(true);
+    connect(pollTimer_, &QTimer::timeout, this, &AuthBridge::pollNow);
+```
+
+**d)** In `logout()` vor der Auswertung von `complete` — genauer: hinter `http_.reset();` — den Rückbau des Paarungsablaufs ergänzen:
+
+```cpp
+    resetPairing();
+```
+
+**e)** Hinter `logout()`, vor dem schliessenden Namensraum, die sieben Methoden einfügen:
+
+```cpp
+void AuthBridge::resetPairing() {
+    pollTimer_->stop();
+    pairing_.reset();
+    trust_.reset();
+    pendingServerUrl_.clear();
+}
+
 void AuthBridge::connectToServer(const QString& rawUrl) {
     resetPairing();
 
@@ -2998,7 +3050,7 @@ Erwartet: **173 Tests, alle bestanden** (164 plus 9 neue).
 - [ ] **Step 6: Committen**
 
 ```powershell
-git add src/bridge/AuthBridge.cpp tests/bridge/auth_bridge_test.cpp
+git add src/bridge/AuthBridge.h src/bridge/AuthBridge.cpp tests/bridge/auth_bridge_test.cpp
 git commit -m @'
 feat(bridge): AuthBridge fuehrt den Paarungsablauf
 
@@ -4235,7 +4287,9 @@ Durchgeführt nach dem Schreiben, gegen die Stufen-Spec:
 
 **Zwei bewusste Abweichungen**, beide oben im Kopf begründet: `certificateChanged` trägt einen Grund mit, und `pollNow()` ist öffentlich.
 
+**Nachtrag vor der Ausführung (2026-07-27).** Die erste Fassung liess Task 5 sieben leere Methodenrümpfe anlegen, die Task 6 füllen sollte. Das ist toter Code, auch wenn er kurz lebt. Task 5 deklariert die Paarungs-Slots jetzt gar nicht erst; Task 6 fügt Deklaration und Rumpf in einem Zug ein. Betroffen: Task 5 Schritte 7 und 8, Task 6 Schritte 2 bis 4.
+
 **Typkonsistenz.** `AuthOutcome` wird in Task 3 definiert und in Task 5 in `restoreSession()` verwendet — alle fünf Werte sind dort abgedeckt. `TrustState` wird in Task 1 definiert und in Task 6 verwendet — ebenfalls alle sechs. `SessionRepository::clear()` liefert ab Task 2 `bool`; Task 5 wertet ihn aus, `tools/probe` wurde in Task 2 mitgezogen. `saveAccessToken` entsteht in Task 2 und wird in Task 3 gebraucht — die Reihenfolge stimmt. `FakeSecretStore::failOnEraseNumber` entsteht in Task 2 und wird in Task 5 benutzt. Die Seitenmethoden aus Task 7 (`showCertificate`, `showChange`, `showConnection`, `showCode`, `stop`) heissen in Task 8 genauso.
 
-**Reihenfolgeabhängigkeiten.** 1 → 6 (`TrustNegotiation`), 2 → 3 (`saveAccessToken`), 2 → 5 (`clear`, `failOnEraseNumber`), 3 → 5 (`AuthenticatedClient`), 4 → 8 (`deviceId`), 5 → 6 (leere Slots), 7 → 8 (Seiten). Keine Rückwärtskante.
+**Reihenfolgeabhängigkeiten.** 1 → 6 (`TrustNegotiation`), 2 → 3 (`saveAccessToken`), 2 → 5 (`clear`, `failOnEraseNumber`), 3 → 5 (`AuthenticatedClient`), 4 → 8 (`deviceId`), 5 → 6 (Klasse und Konstruktor), 7 → 8 (Seiten). Keine Rückwärtskante.
 
