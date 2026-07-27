@@ -185,7 +185,13 @@ int commandStatus() {
 int commandLogout() {
     WindowsCredentialStore secrets;
     FileSessionRepository repository(sessionPath(), secrets);
-    repository.clear();
+
+    if (!repository.clear()) {
+        std::cerr << "Sitzung nur unvollständig entfernt. Im "
+                     "Anmeldeinformationsspeicher unter „BaluDesk“ nachsehen.\n";
+        return 1;
+    }
+
     std::cout << "Sitzung entfernt.\n";
     return 0;
 }

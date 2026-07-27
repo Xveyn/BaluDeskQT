@@ -20,7 +20,8 @@ public:
 
     [[nodiscard]] std::optional<Session> load() override;
     bool save(const Session& session) override;
-    void clear() override;
+    bool saveAccessToken(const std::string& accessToken) override;
+    bool clear() override;
 
 private:
     std::string jsonPath_;

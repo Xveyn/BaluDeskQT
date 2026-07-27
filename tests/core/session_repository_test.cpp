@@ -327,6 +327,104 @@ TEST(SessionRepositoryTest, LeavesNothingBehindWhenAFreshSaveFailsPartway) {
     EXPECT_FALSE(repository.load().has_value());
 }
 
+TEST(SessionRepositoryTest, SaveAccessTokenReplacesOnlyTheAccessToken) {
+    const auto directory = makeEmptyTempDir("token_ersetzen");
+    FakeSecretStore secrets;
+    FileSessionRepository repository((directory / "session.json").string(), secrets);
+    ASSERT_TRUE(repository.save(exampleSession()));
+
+    EXPECT_TRUE(repository.saveAccessToken("frisches-zugangstoken"));
+
+    const auto loaded = repository.load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->accessToken, "frisches-zugangstoken");
+    // Das Erneuerungstoken wird vom Server nicht rotiert - es darf hier auch
+    // nicht verlorengehen.
+    EXPECT_EQ(loaded->refreshToken, "erneuerungstoken");
+    EXPECT_EQ(loaded->username, "sven");
+    EXPECT_EQ(loaded->publicKeyPin, "sha256//AAAABBBBCCCC=");
+}
+
+TEST(SessionRepositoryTest, SaveAccessTokenLeavesTheFileUntouched) {
+    const auto directory = makeEmptyTempDir("datei_unberuehrt");
+    FakeSecretStore secrets;
+    const std::string path = (directory / "session.json").string();
+    FileSessionRepository repository(path, secrets);
+    ASSERT_TRUE(repository.save(exampleSession()));
+
+    const auto readFile = [&path]() {
+        std::ifstream stream(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(stream),
+                           std::istreambuf_iterator<char>());
+    };
+    const std::string before = readFile();
+
+    ASSERT_TRUE(repository.saveAccessToken("frisches-zugangstoken"));
+
+    // Der Grund für den eigenen Weg: beim Erneuern wechselt nur das
+    // Geheimnis. Fasst dieser Pfad die Datei nicht an, kennt er auch das
+    // Zeitfenster nicht, in dem neue Token neben alten Metadaten stehen.
+    EXPECT_EQ(readFile(), before);
+}
+
+TEST(SessionRepositoryTest, SaveAccessTokenRefusesAnEmptyToken) {
+    const auto directory = makeEmptyTempDir("token_leer");
+    FakeSecretStore secrets;
+    FileSessionRepository repository((directory / "session.json").string(), secrets);
+    ASSERT_TRUE(repository.save(exampleSession()));
+
+    // Ein leeres Zugangstoken abzulegen hiesse, eine funktionierende Sitzung
+    // gegen eine kaputte zu tauschen.
+    EXPECT_FALSE(repository.saveAccessToken(""));
+    EXPECT_EQ(repository.load()->accessToken, "zugangstoken");
+}
+
+TEST(SessionRepositoryTest, SaveAccessTokenReportsAFailure) {
+    const auto directory = makeEmptyTempDir("token_fehler");
+    FakeSecretStore secrets;
+    FileSessionRepository repository((directory / "session.json").string(), secrets);
+    ASSERT_TRUE(repository.save(exampleSession()));
+
+    // save() der Sitzung hat bereits zweimal abgelegt; der dritte Aufruf ist
+    // der erste von saveAccessToken().
+    secrets.failOnSaveNumber = 3;
+    EXPECT_FALSE(repository.saveAccessToken("frisches-zugangstoken"));
+}
+
+TEST(SessionRepositoryTest, ClearReportsSuccessOnACompleteRemoval) {
+    const auto directory = makeEmptyTempDir("abmelden_vollstaendig");
+    FakeSecretStore secrets;
+    const std::string path = (directory / "session.json").string();
+    FileSessionRepository repository(path, secrets);
+    ASSERT_TRUE(repository.save(exampleSession()));
+
+    EXPECT_TRUE(repository.clear());
+    EXPECT_FALSE(repository.load().has_value());
+    EXPECT_FALSE(fs::exists(path));
+    EXPECT_TRUE(secrets.entries.empty());
+}
+
+TEST(SessionRepositoryTest, ClearReportsFailureWhenASecretRemained) {
+    const auto directory = makeEmptyTempDir("abmelden_rest");
+    FakeSecretStore secrets;
+    FileSessionRepository repository((directory / "session.json").string(), secrets);
+    ASSERT_TRUE(repository.save(exampleSession()));
+
+    // Der Abmelde-Knopf soll nicht „erledigt" melden, während ein Token im
+    // Anmeldeinformationsspeicher zurückbleibt.
+    secrets.failOnEraseNumber = 1;
+    EXPECT_FALSE(repository.clear());
+}
+
+TEST(SessionRepositoryTest, ClearOnAnEmptyStoreReportsSuccess) {
+    const auto directory = makeEmptyTempDir("abmelden_leer");
+    FakeSecretStore secrets;
+    FileSessionRepository repository((directory / "session.json").string(), secrets);
+
+    // Nichts zu entfernen heisst: das Ziel ist erreicht.
+    EXPECT_TRUE(repository.clear());
+}
+
 TEST(SessionTest, IsValidOnlyWithEverythingThatMatters) {
     Session session = exampleSession();
     EXPECT_TRUE(session.isValid());

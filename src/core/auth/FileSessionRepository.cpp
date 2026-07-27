@@ -127,6 +127,15 @@ bool FileSessionRepository::save(const Session& session) {
     const std::filesystem::path path(jsonPath_);
     if (path.has_parent_path()) {
         std::filesystem::create_directories(path.parent_path(), error);
+        if (error) {
+            // Ohne diese Prüfung wäre ein Verzeichnisfehler im Protokoll nicht
+            // von einem Dateifehler zu unterscheiden - und der Rückbau der
+            // Geheimnisse unterbliebe.
+            Logger::error("Sitzung: Ablageverzeichnis konnte nicht angelegt werden — {}",
+                          error.message());
+            rollbackSecrets();
+            return false;
+        }
     }
 
     // Erst als Text im Speicher aufbauen und in eine Nachbardatei schreiben,
@@ -201,14 +210,50 @@ bool FileSessionRepository::save(const Session& session) {
     return true;
 }
 
-void FileSessionRepository::clear() {
-    secrets_.erase(kAccessTokenKey);
-    secrets_.erase(kRefreshTokenKey);
+bool FileSessionRepository::saveAccessToken(const std::string& accessToken) {
+    if (accessToken.empty()) {
+        Logger::error("Sitzung: leeres Zugangstoken wird nicht abgelegt");
+        return false;
+    }
+
+    // Bewusst nur das Geheimnis: die Datei trägt Adresse, Benutzername und
+    // Pin, und keiner dieser Werte ändert sich beim Erneuern.
+    if (!secrets_.save(kAccessTokenKey, accessToken)) {
+        Logger::error("Sitzung: erneuertes Zugangstoken konnte nicht abgelegt werden");
+        return false;
+    }
+
+    Logger::debug("Sitzung: Zugangstoken erneuert abgelegt");
+    return true;
+}
+
+bool FileSessionRepository::clear() {
+    bool complete = true;
+
+    if (!secrets_.erase(kAccessTokenKey)) {
+        Logger::error("Sitzung: Zugangstoken konnte nicht entfernt werden");
+        complete = false;
+    }
+    if (!secrets_.erase(kRefreshTokenKey)) {
+        Logger::error("Sitzung: Erneuerungstoken konnte nicht entfernt werden");
+        complete = false;
+    }
 
     std::error_code error;
+    // Der Rückgabewert von remove() unterscheidet „entfernt" von „war nicht
+    // da"; beides ist Erfolg. Nur der Fehlercode zeigt an, dass es nicht ging.
     std::filesystem::remove(jsonPath_, error);
+    if (error) {
+        Logger::error("Sitzung: Ablagedatei konnte nicht entfernt werden — {}", error.message());
+        complete = false;
+    }
 
-    Logger::info("Sitzung: entfernt");
+    if (complete) {
+        Logger::info("Sitzung: entfernt");
+    } else {
+        Logger::warn("Sitzung: unvollständig entfernt, es blieb etwas zurück");
+    }
+    return complete;
 }
 
 }  // namespace baludesk::core

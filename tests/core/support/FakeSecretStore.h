@@ -31,6 +31,10 @@ public:
     }
 
     bool erase(const std::string& key) override {
+        ++eraseCallCount;
+        if (eraseCallCount == failOnEraseNumber) {
+            return false;
+        }
         entries.erase(key);
         return true;
     }
@@ -48,6 +52,14 @@ public:
     std::size_t failOnSaveNumber = 0;
 
     std::size_t saveCallCount = 0;
+
+    // Lässt den n-ten erase()-Aufruf scheitern (1 = der erste). 0 heisst: nie.
+    // Gegenstück zu failOnSaveNumber, aus demselben Grund als Zähler statt
+    // als Schlüsselname: die Schlüssel sind private Konstanten von
+    // FileSessionRepository.
+    std::size_t failOnEraseNumber = 0;
+
+    std::size_t eraseCallCount = 0;
 };
 
 }  // namespace baludesk::core::test
