@@ -5,11 +5,17 @@
 #include "app/MainWindow.h"
 #include "app/QtLogBridge.h"
 #include "app/SettingsStore.h"
+#include "core/api/CurlTransport.h"
 #include "core/auth/SessionPaths.h"
 #include "core/util/AppConfig.h"
 #include "core/util/Logger.h"
 
 int main(int argc, char* argv[]) {
+    // Vor QApplication: curls Vertrag verlangt, dass sein globaler Zustand
+    // steht, bevor andere Threads existieren - und BaluDesk macht in
+    // MainWindow einen auf.
+    baludesk::core::CurlTransport::initGlobals();
+
     QApplication application(argc, argv);
 
     // Muss vor dem ersten QSettings-Zugriff stehen, weil QSettings den

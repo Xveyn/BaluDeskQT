@@ -97,12 +97,13 @@ HttpErrorKind classify(CURLcode code) {
 
 }  // namespace
 
-CurlTransport::CurlTransport() {
-    // Genau einmal je Programmlauf, unabhängig davon, wie viele Instanzen
-    // entstehen. curls Vertrag verlangt außerdem, dass dies geschieht, bevor
-    // andere Threads existieren - std::call_once beim ersten Konstruieren
-    // greift früh genug, solange die allererste Instanz vor QApplication
-    // (oder einem sonstigen Thread-Start) angelegt wird.
+void CurlTransport::initGlobals() {
+    // Genau einmal je Programmlauf, unabhängig davon, wie oft dies oder der
+    // Konstruktor aufgerufen werden. Ein benannter, öffentlicher Aufruf statt
+    // einer blossen Nebenwirkung des ersten Konstruierens, weil curls Vertrag
+    // verlangt, dass dies geschieht, bevor andere Threads existieren - eine
+    // Oberfläche mit Arbeiterthread kann nicht mehr darauf vertrauen, dass die
+    // allererste Instanz zufällig vor jedem Thread-Start entsteht.
     static std::once_flag globalInitFlag;
     std::call_once(globalInitFlag, [] {
         const CURLcode code = curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -110,6 +111,12 @@ CurlTransport::CurlTransport() {
             Logger::error("curl_global_init fehlgeschlagen: {}", curl_easy_strerror(code));
         }
     });
+}
+
+CurlTransport::CurlTransport() {
+    // Für Aufrufer, die keinen Wert auf den frühen, benannten Zeitpunkt legen
+    // (etwa die Tests) - siehe initGlobals() für den eigentlichen Vertrag.
+    initGlobals();
 }
 
 CurlTransport::~CurlTransport() = default;

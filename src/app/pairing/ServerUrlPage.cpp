@@ -71,6 +71,9 @@ void ServerUrlPage::clearMessages() {
 void ServerUrlPage::setBusy(bool busy) {
     connectButton_->setEnabled(!busy);
     connectButton_->setText(busy ? tr("Verbinde…") : tr("Verbinden"));
+    // Ohne das hier ginge die Eingabetaste am gesperrten Knopf vorbei und
+    // könnte einen zweiten Vorgang starten, während der erste noch läuft.
+    input_->setEnabled(!busy);
 }
 
 }  // namespace baludesk::app

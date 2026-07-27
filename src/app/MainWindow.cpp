@@ -16,7 +16,6 @@
 #include "bridge/AuthBridge.h"
 #include "core/api/CurlTransport.h"
 #include "core/auth/SessionPaths.h"
-#include "core/util/Logger.h"
 #include "core/util/WindowsCredentialStore.h"
 
 namespace baludesk::app {
