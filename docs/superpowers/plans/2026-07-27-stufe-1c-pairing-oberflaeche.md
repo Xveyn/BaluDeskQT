@@ -93,13 +93,13 @@ tools/probe/main.cpp                GEÄNDERT  fährt auf TrustNegotiation
 |---|---|---|
 | 1 TrustNegotiation | 14 | 136 |
 | 2 Repository und Pfade | 8 | 144 |
-| 3 AuthenticatedClient | 11 | 155 |
-| 4 Gerätekennung | 4 | 159 |
-| 5 AuthBridge: Sitzung und Abmelden | 7 | 166 |
-| 6 AuthBridge: Paaren | 9 | 175 |
-| 7 Seiten der Oberfläche | 3 | 178 |
-| 8 MainWindow | 0 | 178 |
-| 9 Abnahme | 0 | 178 |
+| 3 AuthenticatedClient | 12 | 156 |
+| 4 Gerätekennung | 4 | 160 |
+| 5 AuthBridge: Sitzung und Abmelden | 7 | 167 |
+| 6 AuthBridge: Paaren | 9 | 176 |
+| 7 Seiten der Oberfläche | 3 | 179 |
+| 8 MainWindow | 0 | 179 |
+| 9 Abnahme | 0 | 179 |
 
 ---
 
@@ -1813,7 +1813,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **155 Tests, alle bestanden** (144 plus 11 neue).
+Erwartet: **156 Tests, alle bestanden** (144 plus 12 neue).
 
 - [ ] **Step 9: Committen**
 
@@ -1983,7 +1983,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **159 Tests, alle bestanden** (155 plus 4 neue).
+Erwartet: **160 Tests, alle bestanden** (156 plus 4 neue).
 
 - [ ] **Step 6: Committen**
 
@@ -2571,7 +2571,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **166 Tests, alle bestanden** (159 plus 7 neue). Keine Warnungen aus eigenem Code.
+Erwartet: **167 Tests, alle bestanden** (160 plus 7 neue). Keine Warnungen aus eigenem Code.
 
 - [ ] **Step 10: Committen**
 
@@ -3110,7 +3110,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **175 Tests, alle bestanden** (166 plus 9 neue).
+Erwartet: **176 Tests, alle bestanden** (167 plus 9 neue).
 
 - [ ] **Step 6: Committen**
 
@@ -3906,7 +3906,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **178 Tests, alle bestanden** (175 plus 3 neue). Keine Warnungen aus eigenem Code.
+Erwartet: **179 Tests, alle bestanden** (176 plus 3 neue). Keine Warnungen aus eigenem Code.
 
 - [ ] **Step 12: Committen**
 
@@ -4221,7 +4221,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 178 Tests grün, keine Warnungen aus eigenem Code.
+Erwartet: 179 Tests grün, keine Warnungen aus eigenem Code.
 
 ```powershell
 .\build\msvc2022\Debug\baludesk.exe
@@ -4297,7 +4297,7 @@ In `docs/superpowers/specs/2026-07-26-baludesk-qt-design.md` hinter dem Block �
 ```markdown
 ### Stufe 1c — Pairing-Oberfläche und Token-Erneuerung (abgenommen 2026-07-__)
 
-178 Tests. Die Abnahme wurde gegen den laufenden Server gefahren, weil der
+179 Tests. Die Abnahme wurde gegen den laufenden Server gefahren, weil der
 entscheidende Schritt einen Menschen am Browser verlangt.
 
 | Prüfung | Ergebnis |
@@ -4336,7 +4336,7 @@ git add docs/superpowers
 git commit -m @'
 docs: Stufe 1c abgenommen, Uebergabe an Stufe 2
 
-Abnahme gegen den laufenden Server gefahren, 178 Tests gruen. Das
+Abnahme gegen den laufenden Server gefahren, 179 Tests gruen. Das
 Abnahmekriterium der Stufe 1 ist erstmals ueber die Anwendung selbst
 erreicht statt ueber das Pruefprogramm.
 '@
