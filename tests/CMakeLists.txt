@@ -59,6 +59,7 @@ gtest_discover_tests(baludesk_core_tests)
 add_executable(baludesk_app_tests
     app/settings_store_test.cpp
     app/qt_log_bridge_test.cpp
+    app/countdown_test.cpp
     bridge/auth_bridge_test.cpp
 )
 

@@ -6,6 +6,12 @@ add_library(baludesk_app_lib STATIC
     MainWindow.cpp
     SettingsStore.cpp
     QtLogBridge.cpp
+    ConnectedPage.cpp
+    pairing/Countdown.cpp
+    pairing/ServerUrlPage.cpp
+    pairing/CertificatePage.cpp
+    pairing/PairingCodePage.cpp
+    pairing/CertificateChangedPage.cpp
 )
 
 target_include_directories(baludesk_app_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
