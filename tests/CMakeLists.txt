@@ -36,6 +36,7 @@ add_executable(baludesk_core_tests
     core/session_repository_test.cpp
     core/session_paths_test.cpp
     core/trust_negotiation_test.cpp
+    core/authenticated_client_test.cpp
 )
 
 target_compile_definitions(baludesk_core_tests PRIVATE

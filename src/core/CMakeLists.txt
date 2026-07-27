@@ -25,6 +25,7 @@ add_library(baludesk_core STATIC
     api/ServerUrl.cpp
     api/TrustNegotiation.cpp
     auth/PairingClient.cpp
+    auth/AuthenticatedClient.cpp
     auth/FileSessionRepository.cpp
     auth/SessionPaths.cpp
 )
