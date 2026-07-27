@@ -91,15 +91,15 @@ tools/probe/main.cpp                GEÄNDERT  fährt auf TrustNegotiation
 
 | Task | neu | Summe |
 |---|---|---|
-| 1 TrustNegotiation | 12 | 134 |
-| 2 Repository und Pfade | 8 | 142 |
-| 3 AuthenticatedClient | 11 | 153 |
-| 4 Gerätekennung | 4 | 157 |
-| 5 AuthBridge: Sitzung und Abmelden | 7 | 164 |
-| 6 AuthBridge: Paaren | 9 | 173 |
-| 7 Seiten der Oberfläche | 3 | 176 |
-| 8 MainWindow | 0 | 176 |
-| 9 Abnahme | 0 | 176 |
+| 1 TrustNegotiation | 14 | 136 |
+| 2 Repository und Pfade | 8 | 144 |
+| 3 AuthenticatedClient | 11 | 155 |
+| 4 Gerätekennung | 4 | 159 |
+| 5 AuthBridge: Sitzung und Abmelden | 7 | 166 |
+| 6 AuthBridge: Paaren | 9 | 175 |
+| 7 Seiten der Oberfläche | 3 | 178 |
+| 8 MainWindow | 0 | 178 |
+| 9 Abnahme | 0 | 178 |
 
 ---
 
@@ -344,6 +344,42 @@ TEST(TrustNegotiationTest, ConfirmKeepsNoPinWhenTheCheckStillFails) {
     // erzeugen, die niemand mehr zuordnen kann.
     EXPECT_TRUE(f.trust->confirmedPin().empty());
 }
+
+TEST(TrustNegotiationTest, ConfirmReleasesThePinnedPolicyWhenTheCheckFails) {
+    Fixture f;
+    f.transport->queueResult(untrustedResult(testCertificate()));
+    ASSERT_EQ(f.trust->probe(), TrustState::ConfirmationRequired);
+
+    f.transport->queueResult(failure(HttpErrorKind::Network, "connection reset"));
+    ASSERT_EQ(f.trust->confirm(), TrustState::Unreachable);
+
+    // Der HttpClient gehört der Klasse nicht und überlebt sie. Bliebe er auf
+    // einem nie bestätigten Schlüssel stehen, wäre jede spätere Prüfung über
+    // dieses Paar gegen ein Zertifikat gerichtet, dem nie jemand zugestimmt
+    // hat - und confirmedPin() bliebe dabei leer, der Aufrufer hätte also
+    // nicht einmal etwas abzulegen.
+    f.transport->queueResult(okResult());
+    ASSERT_EQ(f.trust->probe(), TrustState::Trusted);
+
+    const auto& lastCall = f.transport->calls.back();
+    EXPECT_EQ(lastCall.policy.mode, TlsPolicy::Mode::SystemTrust);
+    EXPECT_TRUE(lastCall.policy.publicKeyPin.empty());
+}
+
+TEST(TrustNegotiationTest, ForgetsThePromptWhenTheServerBecomesUnreachable) {
+    Fixture f;
+    f.transport->queueResult(untrustedResult(testCertificate()));
+    ASSERT_EQ(f.trust->probe(), TrustState::ConfirmationRequired);
+    ASSERT_TRUE(f.trust->prompt().has_value());
+
+    f.transport->queueResult(failure(HttpErrorKind::Network, "connection reset"));
+    ASSERT_EQ(f.trust->confirm(), TrustState::Unreachable);
+
+    // Ein belegtes prompt_ gehört ausschliesslich zu ConfirmationRequired.
+    // Sonst zeigt der Dialog eine Zertifikatsnachfrage für einen Server, der
+    // gerade bloss nicht erreichbar ist.
+    EXPECT_FALSE(f.trust->prompt().has_value());
+}
 ```
 
 - [ ] **Step 2: `tests/CMakeLists.txt` erweitern**
@@ -443,6 +479,12 @@ public:
     // Der Pin gilt erst dann als bestätigt, wenn die erneute Prüfung
     // Trusted ergibt - ein Pin, der nie zu einer stehenden Verbindung
     // geführt hat, gehört nicht in die Sitzung.
+    //
+    // Scheitert die erneute Prüfung, wird auch die TLS-Regel des HttpClient
+    // wieder auf volle Prüfung zurückgesetzt. Der Client gehört dieser
+    // Klasse nicht und überlebt sie; bliebe er auf einem nie bestätigten
+    // Schlüssel stehen, richtete sich jede spätere Prüfung über ihn gegen
+    // ein Zertifikat, dem niemand zugestimmt hat.
     TrustState confirm();
 
     [[nodiscard]] const std::optional<TrustPrompt>& prompt() const { return prompt_; }
@@ -462,6 +504,10 @@ private:
     TrustState evaluate();
 
     TrustState settle(TrustState state, std::string message);
+
+    // Nimmt einen angehefteten Schlüssel wieder zurück, wenn er sich nicht
+    // bewährt hat.
+    void releasePin();
 
     HttpClient& http_;
 
@@ -541,14 +587,21 @@ TrustState TrustNegotiation::evaluate() {
         return settle(TrustState::ConfirmationRequired, {});
     }
 
+    // Ab hier gilt durchgehend: ein belegtes prompt_ gehört ausschliesslich zu
+    // ConfirmationRequired. Bliebe es in einem Fehlpfad stehen, zeigte ein
+    // Aufrufer, der prompt().has_value() abfragt, eine Zertifikatsnachfrage
+    // für einen Server, der gerade bloss nicht erreichbar ist.
+
     if (result.error == HttpErrorKind::Network || result.error == HttpErrorKind::Timeout) {
         Logger::debug("Vertrauen: Server nicht erreichbar — {}", result.detail);
+        prompt_.reset();
         return settle(TrustState::Unreachable,
                       "Der Server ist nicht erreichbar: " + result.detail);
     }
 
     if (result.error != HttpErrorKind::None) {
         Logger::warn("Vertrauen: Verbindung unbrauchbar — {}", result.detail);
+        prompt_.reset();
         return settle(TrustState::Failed,
                       "Die Verbindung zum Server ist unbrauchbar: " + result.detail);
     }
@@ -556,6 +609,7 @@ TrustState TrustNegotiation::evaluate() {
     if (!result.ok()) {
         // Die Verbindung steht, aber am anderen Ende antwortet kein BaluHost.
         Logger::warn("Vertrauen: unerwarteter Status {} auf {}", result.statusCode, kHealthPath);
+        prompt_.reset();
         return settle(TrustState::Failed,
                       "Unter dieser Adresse antwortet kein BaluHost-Server (Status " +
                           std::to_string(result.statusCode) + ").");
@@ -595,13 +649,24 @@ TrustState TrustNegotiation::confirm() {
         // Zweig steht hier, damit ein künftiger Umbau des Transports nicht
         // still in einer Endlosschleife aus Nachfragen landet.
         prompt_.reset();
+        releasePin();
         return settle(TrustState::Failed,
                       "Das Zertifikat ließ sich auch nach der Bestätigung nicht prüfen.");
     }
 
-    // Nicht bestätigt: der Pin bleibt ungesetzt.
+    // Nicht bestätigt: weder Pin noch Regel bleiben stehen.
     confirmedPin_.clear();
+    releasePin();
     return result;
+}
+
+void TrustNegotiation::releasePin() {
+    // Zurück auf volle Prüfung, nicht auf „die Regel von vorhin": confirm()
+    // ist ausschliesslich nach ConfirmationRequired wirksam, und dieser
+    // Zustand entsteht nur aus CertificateUntrusted. Im gepinnten Modus kann
+    // CertificateUntrusted baulich nicht auftreten (Abnahme der Stufe 1a) -
+    // der HttpClient stand vor dem Aufruf also immer auf SystemTrust.
+    http_.setTlsPolicy(TlsPolicy{});
 }
 
 }  // namespace baludesk::core
@@ -636,7 +701,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **134 Tests, alle bestanden** (122 vorhandene plus 12 neue).
+Erwartet: **136 Tests, alle bestanden** (122 vorhandene plus 14 neue).
 
 - [ ] **Step 8: `tools/probe/main.cpp` auf die neue Klasse umstellen**
 
@@ -694,12 +759,12 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 134 Tests grün, keine Warnungen aus eigenem Code.
+Erwartet: 136 Tests grün, keine Warnungen aus eigenem Code.
 
 Dann von Hand, weil nur das die Umstellung belegt (Ausgabe genau lesen, nicht nur den Rückgabewert):
 
 ```powershell
-.\build\msvc2022\Debug\baludesk_probe.exe status
+.\build\msvc2022\tools\probe\Debug\baludesk_probe.exe status
 ```
 
 Erwartet: unveränderte Ausgabe wie vor der Umstellung — verbunden, `/api/auth/me → Status 200`.
@@ -1092,7 +1157,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **142 Tests, alle bestanden** (134 plus 8 neue). Keine Warnungen aus eigenem Code.
+Erwartet: **144 Tests, alle bestanden** (136 plus 8 neue). Keine Warnungen aus eigenem Code.
 
 - [ ] **Step 10: Committen**
 
@@ -1748,7 +1813,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **153 Tests, alle bestanden** (142 plus 11 neue).
+Erwartet: **155 Tests, alle bestanden** (144 plus 11 neue).
 
 - [ ] **Step 9: Committen**
 
@@ -1918,7 +1983,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **157 Tests, alle bestanden** (153 plus 4 neue).
+Erwartet: **159 Tests, alle bestanden** (155 plus 4 neue).
 
 - [ ] **Step 6: Committen**
 
@@ -2506,7 +2571,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **164 Tests, alle bestanden** (157 plus 7 neue). Keine Warnungen aus eigenem Code.
+Erwartet: **166 Tests, alle bestanden** (159 plus 7 neue). Keine Warnungen aus eigenem Code.
 
 - [ ] **Step 10: Committen**
 
@@ -3045,7 +3110,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **173 Tests, alle bestanden** (164 plus 9 neue).
+Erwartet: **175 Tests, alle bestanden** (166 plus 9 neue).
 
 - [ ] **Step 6: Committen**
 
@@ -3841,7 +3906,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: **176 Tests, alle bestanden** (173 plus 3 neue). Keine Warnungen aus eigenem Code.
+Erwartet: **178 Tests, alle bestanden** (175 plus 3 neue). Keine Warnungen aus eigenem Code.
 
 - [ ] **Step 12: Committen**
 
@@ -4156,7 +4221,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Erwartet: 176 Tests grün, keine Warnungen aus eigenem Code.
+Erwartet: 178 Tests grün, keine Warnungen aus eigenem Code.
 
 ```powershell
 .\build\msvc2022\Debug\baludesk.exe
@@ -4232,7 +4297,7 @@ In `docs/superpowers/specs/2026-07-26-baludesk-qt-design.md` hinter dem Block �
 ```markdown
 ### Stufe 1c — Pairing-Oberfläche und Token-Erneuerung (abgenommen 2026-07-__)
 
-176 Tests. Die Abnahme wurde gegen den laufenden Server gefahren, weil der
+178 Tests. Die Abnahme wurde gegen den laufenden Server gefahren, weil der
 entscheidende Schritt einen Menschen am Browser verlangt.
 
 | Prüfung | Ergebnis |
@@ -4271,7 +4336,7 @@ git add docs/superpowers
 git commit -m @'
 docs: Stufe 1c abgenommen, Uebergabe an Stufe 2
 
-Abnahme gegen den laufenden Server gefahren, 176 Tests gruen. Das
+Abnahme gegen den laufenden Server gefahren, 178 Tests gruen. Das
 Abnahmekriterium der Stufe 1 ist erstmals ueber die Anwendung selbst
 erreicht statt ueber das Pruefprogramm.
 '@
