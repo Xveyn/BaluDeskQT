@@ -86,7 +86,16 @@ public slots:
 signals:
     void noSession();
     void sessionEstablished(const QString& serverUrl, const QString& username);
-    void serverUnreachable(const QString& message);
+
+    // Trägt Adresse und Benutzernamen mit, weil die Oberfläche daraufhin die
+    // verbundene Ansicht mit Offline-Hinweis zeigt statt der Eingabeseite:
+    // ein schlafender Server ist laut Spec Abschnitt 10 Betriebszustand, und
+    // wer den Nutzer dafür zur Serveradresse zurückschickt, sagt ihm, er sei
+    // nicht gepaart. Beide Werte sind belegt, weil dieses Signal nur bei
+    // vorhandener Sitzung entsteht.
+    void serverUnreachable(const QString& serverUrl,
+                           const QString& username,
+                           const QString& message);
 
     // Der angeheftete Schlüssel passt nicht mehr, oder ein Zertifikat ohne
     // Pin lässt sich nicht mehr prüfen. Beides endet auf derselben Seite,

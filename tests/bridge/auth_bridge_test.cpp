@@ -187,6 +187,16 @@ TEST(AuthBridgeTest, KeepsTheSessionWhenTheServerIsAsleep) {
     EXPECT_EQ(unreachable.count(), 1);
     EXPECT_EQ(reauth.count(), 0);
     EXPECT_TRUE(f.secrets->contains("session/access-token"));
+
+    // Adresse und Benutzername gehen mit, damit die Oberfläche die verbundene
+    // Ansicht mit Offline-Hinweis zeigen kann statt der Eingabeseite. Ohne
+    // diese Nutzlast wüsste sie nicht, mit wem sie gerade nicht redet - und
+    // müsste den Nutzer fragen, wo sein Server steht, obwohl er längst
+    // gepaart ist.
+    ASSERT_EQ(unreachable.at(0).size(), 3);
+    EXPECT_EQ(unreachable.at(0).at(0).toString(), QStringLiteral("https://nas.example.com"));
+    EXPECT_EQ(unreachable.at(0).at(1).toString(), QStringLiteral("sven"));
+    EXPECT_FALSE(unreachable.at(0).at(2).toString().isEmpty());
 }
 
 TEST(AuthBridgeTest, ReportsAChangedCertificate) {

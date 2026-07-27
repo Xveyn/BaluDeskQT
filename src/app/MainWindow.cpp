@@ -115,14 +115,19 @@ void MainWindow::wireBridge() {
                 stack_->setCurrentWidget(connectedPage_);
             });
 
+    // Ein schlafender Server ist laut Spec Abschnitt 10 ein normaler
+    // Betriebszustand. Die Sitzung bleibt, also bleibt auch die verbundene
+    // Ansicht - nur mit einem Hinweis darüber. Den Nutzer hier zur
+    // Serveradresse zurückzuschicken hiesse ihm zu sagen, er sei nicht
+    // gepaart, und genau das nennt die Spec im Alltag unbrauchbar.
     connect(bridge_, &bridge::AuthBridge::serverUnreachable, this,
-            [this](const QString& message) {
-                if (stack_->currentWidget() == connectedPage_) {
-                    connectedPage_->showOffline(message);
-                    return;
-                }
-                serverUrlPage_->showProblem(message);
-                stack_->setCurrentWidget(serverUrlPage_);
+            [this](const QString& serverUrl, const QString& username,
+                   const QString& message) {
+                pairingCodePage_->stop();
+                serverUrlPage_->setBusy(false);
+                connectedPage_->showConnection(serverUrl, username);
+                connectedPage_->showOffline(message);
+                stack_->setCurrentWidget(connectedPage_);
             });
 
     connect(bridge_, &bridge::AuthBridge::serverUrlRejected,

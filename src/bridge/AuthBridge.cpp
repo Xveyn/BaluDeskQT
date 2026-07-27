@@ -82,7 +82,9 @@ void AuthBridge::restoreSession() {
                 emit reauthRequired(tr("Die Anmeldung gilt nicht mehr. Bitte neu verbinden."));
                 return;
             }
-            emit serverUnreachable(tr("Der Server antwortet unerwartet (Status %1).")
+            emit serverUnreachable(serverUrl,
+                                   QString::fromStdString(session->username),
+                                   tr("Der Server antwortet unerwartet (Status %1).")
                                        .arg(result.response.statusCode));
             return;
 
@@ -96,7 +98,9 @@ void AuthBridge::restoreSession() {
             return;
 
         case core::AuthOutcome::Unreachable:
-            emit serverUnreachable(tr("Der Server ist zurzeit nicht erreichbar."));
+            emit serverUnreachable(serverUrl,
+                                   QString::fromStdString(session->username),
+                                   tr("Der Server ist zurzeit nicht erreichbar."));
             return;
     }
 }
