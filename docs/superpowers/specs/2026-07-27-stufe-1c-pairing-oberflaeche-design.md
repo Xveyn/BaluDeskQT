@@ -120,6 +120,21 @@ sie merkt an, dass die Erneuerung diesen Pfad künftig ständig fährt. Ein enge
 Datei gar nicht anfasst, nimmt dem heißen Pfad dieses Zeitfenster vollständig, statt es zu
 verkleinern.
 
+### 2.7 Ein schlafender Server behält die verbundene Ansicht
+
+Nachgetragen am 2026-07-28, nach dem Abschlussreview der Verdrahtung.
+
+Der Entwurf beschrieb den Ablauf in Abschnitt 4.1 richtig, gab dem Signal aber
+zu wenig mit: `serverUnreachable` trug nur eine Meldung, und das Fenster kannte
+an dieser Stelle weder Adresse noch Benutzernamen. Beim Start steht der
+Ansichtsstapel auf der Serveradresse-Seite — der Nutzer landete also mit einer
+Fehlermeldung dort und sah aus, als sei er gar nicht gepaart.
+
+Das Signal trägt die Sitzungsangaben deshalb mit. Ein nicht erreichbarer Server
+ist laut Abschnitt 10 der übergeordneten Spec ein normaler Betriebszustand; die
+Sitzung bleibt bestehen, und mit ihr die verbundene Ansicht — nur mit einem
+Hinweis darüber.
+
 ---
 
 ## 3. Architektur
@@ -299,7 +314,8 @@ bleibt ein Token zurück, sagt die Oberfläche das, statt „erledigt" zu melden
 
 **Signale** (im GUI-Thread zugestellt, `Qt::QueuedConnection`):
 `noSession()`, `sessionEstablished(QString serverUrl, QString username)`,
-`serverUnreachable(QString)`, `serverUrlRejected(QString)`,
+`serverUnreachable(QString serverUrl, QString username, QString message)`,
+`serverUrlRejected(QString)`,
 `certificateConfirmationRequired(QString fingerprint, QString reason)`,
 `certificateChanged(QString serverUrl)`, `pairingCodeReady(QString code, QString url, int expiresIn)`,
 `pairingNotice(QString)`, `pairingFailed(QString)`, `pairingCancelled()`,
