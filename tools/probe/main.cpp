@@ -15,11 +15,11 @@
 #include "core/api/HttpClient.h"
 #include "core/api/ServerUrl.h"
 #include "core/api/TlsPolicy.h"
+#include "core/api/TrustNegotiation.h"
 #include "core/auth/FileSessionRepository.h"
 #include "core/auth/PairingClient.h"
 #include "core/auth/SessionPaths.h"
 #include "core/util/Logger.h"
-#include "core/util/TlsTrust.h"
 #include "core/util/WindowsCredentialStore.h"
 
 namespace {
@@ -46,31 +46,19 @@ void printUsage() {
               << "  baludesk_probe logout              Sitzung entfernen\n";
 }
 
-// Baut eine TLS-Regel. Bei unbekanntem Zertifikat wird der Fingerabdruck
-// angezeigt und auf der Kommandozeile bestätigt - genau das, was in Stufe 1c
-// ein Dialog tut.
+// Baut eine TLS-Regel. Der Ablauf selbst liegt in core/api/TrustNegotiation -
+// hier bleibt nur, was Kommandozeile ist: fragen und ausgeben. Genau diese
+// Trennung erlaubt es der Oberfläche in Stufe 1c, denselben Ablauf mit einem
+// Dialog zu fahren, statt ihn nachzubauen.
 bool establishTrust(HttpClient& http, std::string& pinOut) {
-    HttpResult result = http.get("/api/health");
+    TrustNegotiation trust(http);
 
-    if (result.error == HttpErrorKind::CertificatePinMismatch) {
-        std::cerr << "Das Zertifikat weicht vom bestätigten ab. Abbruch.\n";
-        return false;
-    }
+    TrustState state = trust.probe();
 
-    if (result.error == HttpErrorKind::CertificateUntrusted) {
-        if (result.peerCertificatePem.empty()) {
-            std::cerr << "Zertifikat nicht vertrauenswürdig, und es war keines auszulesen.\n";
-            return false;
-        }
-        const auto identity = identifyCertificate(result.peerCertificatePem);
-        if (!identity) {
-            std::cerr << "Zertifikat der Gegenstelle ist nicht lesbar.\n";
-            return false;
-        }
-
+    if (state == TrustState::ConfirmationRequired) {
         std::cout << "\nDem Zertifikat dieses Servers wird nicht vertraut.\n"
-                  << "Grund:         " << result.detail << "\n"
-                  << "Fingerabdruck: " << identity->fingerprintSha256 << "\n\n"
+                  << "Grund:         " << trust.prompt()->reason << "\n"
+                  << "Fingerabdruck: " << trust.prompt()->fingerprintSha256 << "\n\n"
                   << "Vergleiche ihn mit dem Server. Vertrauen? [j/N] ";
 
         std::string answer;
@@ -80,26 +68,20 @@ bool establishTrust(HttpClient& http, std::string& pinOut) {
             return false;
         }
 
-        pinOut = identity->publicKeyPin;
-        http.setTlsPolicy(TlsPolicy::pinnedFromConfirmedCertificate(pinOut));
-
-        result = http.get("/api/health");
-        if (!result.ok()) {
-            std::cerr << "Auch mit angeheftetem Schlüssel keine Verbindung: "
-                      << result.detail << "\n";
-            return false;
-        }
-        std::cout << "Zertifikat bestätigt und angeheftet.\n";
-        return true;
+        state = trust.confirm();
     }
 
-    if (!result.ok()) {
-        std::cerr << "Server nicht erreichbar: " << result.detail
-                  << " (Status " << result.statusCode << ")\n";
+    if (state != TrustState::Trusted) {
+        std::cerr << trust.message() << "\n";
         return false;
     }
 
-    std::cout << "Zertifikat regulär geprüft, kein Anheften nötig.\n";
+    pinOut = trust.confirmedPin();
+    if (pinOut.empty()) {
+        std::cout << "Zertifikat regulär geprüft, kein Anheften nötig.\n";
+    } else {
+        std::cout << "Zertifikat bestätigt und angeheftet.\n";
+    }
     return true;
 }
 
