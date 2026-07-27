@@ -1,5 +1,8 @@
 #include "app/SettingsStore.h"
 
+#include <QSysInfo>
+#include <QUuid>
+
 namespace baludesk::app {
 namespace {
 
@@ -10,6 +13,7 @@ constexpr const char* kNotifyOnError = "notifications/onError";
 constexpr const char* kNotifyOnSyncComplete = "notifications/onSyncComplete";
 constexpr const char* kLogMaxFileBytes = "logging/maxFileBytes";
 constexpr const char* kLogMaxFiles = "logging/maxFiles";
+constexpr const char* kDeviceId = "device/id";
 
 }  // namespace
 
@@ -53,6 +57,25 @@ void SettingsStore::save(const core::AppConfig& config) {
     settings_.setValue(kLogMaxFileBytes, static_cast<qulonglong>(sane.logMaxFileBytes));
     settings_.setValue(kLogMaxFiles, static_cast<qulonglong>(sane.logMaxFiles));
     settings_.sync();
+}
+
+QString SettingsStore::deviceId() {
+    const QString stored = settings_.value(kDeviceId).toString();
+    if (!stored.isEmpty()) {
+        return stored;
+    }
+
+    // QUuid::createUuid() zieht aus dem Zufallsgenerator des Systems.
+    const QString created = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    settings_.setValue(kDeviceId, created);
+    settings_.sync();
+    return created;
+}
+
+QString SettingsStore::deviceName() {
+    const QString host = QSysInfo::machineHostName();
+    // Ein leerer Name wäre in der Geräteliste des Servers nicht zuzuordnen.
+    return host.isEmpty() ? QStringLiteral("BaluDesk") : host;
 }
 
 }  // namespace baludesk::app

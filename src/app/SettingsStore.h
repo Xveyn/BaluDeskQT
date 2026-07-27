@@ -26,6 +26,21 @@ public:
 
     void save(const core::AppConfig& config);
 
+    // Die Kennung dieser Installation, wie sie beim Paaren als device_id
+    // mitgeht. Beim ersten Aufruf erzeugt und abgelegt, danach unverändert.
+    //
+    // Absichtlich NICHT in der Sitzung: der Server führt daraus seine
+    // Geräteliste in der Web-Oberfläche. Läge sie in der Sitzung, bekäme
+    // jedes Neupaaren einen neuen Eintrag, und das Aufräumen wäre Handarbeit
+    // im Browser. Die Kennung gehört der Installation, nicht der Bindung an
+    // einen Server - und überlebt deshalb das Abmelden.
+    //
+    // Nicht const: der erste Aufruf schreibt.
+    [[nodiscard]] QString deviceId();
+
+    // Der Name, unter dem das Gerät in der Web-Oberfläche erscheint.
+    [[nodiscard]] static QString deviceName();
+
 private:
     QSettings settings_;
 };

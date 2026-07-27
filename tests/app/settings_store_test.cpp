@@ -77,3 +77,55 @@ TEST(SettingsStoreTest, SaveWritesClampedValues) {
     EXPECT_EQ(raw.value(QStringLiteral("sync/pollIntervalSeconds")).toInt(),
               AppConfig::kMaxPollIntervalSeconds);
 }
+
+TEST(SettingsStoreTest, GeneratesADeviceIdOnFirstUse) {
+    QTemporaryDir directory;
+    ASSERT_TRUE(directory.isValid());
+
+    SettingsStore store(directory.filePath(QStringLiteral("settings.ini")));
+
+    const QString id = store.deviceId();
+    EXPECT_FALSE(id.isEmpty());
+    // Ohne geschweifte Klammern: die sind Windows-Kosmetik, und der Server
+    // führt die Kennung als schlichte Zeichenkette.
+    EXPECT_FALSE(id.startsWith(QLatin1Char('{')));
+}
+
+TEST(SettingsStoreTest, KeepsTheDeviceIdAcrossInstances) {
+    QTemporaryDir directory;
+    ASSERT_TRUE(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.ini"));
+
+    QString first;
+    {
+        SettingsStore store(path);
+        first = store.deviceId();
+    }
+
+    SettingsStore reopened(path);
+    // Läge die Kennung in der Sitzung, bekäme jedes Neupaaren einen neuen
+    // Eintrag in der Geräteliste des Servers.
+    EXPECT_EQ(reopened.deviceId(), first);
+}
+
+TEST(SettingsStoreTest, KeepsTheDeviceIdWhenSettingsAreSaved) {
+    QTemporaryDir directory;
+    ASSERT_TRUE(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.ini"));
+
+    SettingsStore store(path);
+    const QString id = store.deviceId();
+
+    AppConfig config;
+    config.pollIntervalSeconds = 90;
+    store.save(config);
+
+    EXPECT_EQ(store.deviceId(), id);
+    EXPECT_EQ(store.load().pollIntervalSeconds, 90);
+}
+
+TEST(SettingsStoreTest, DeviceNameIsNeverEmpty) {
+    // Der Name erscheint in der Geräteliste. Ein leerer Eintrag dort wäre
+    // nicht zuzuordnen.
+    EXPECT_FALSE(SettingsStore::deviceName().isEmpty());
+}
