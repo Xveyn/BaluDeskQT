@@ -41,6 +41,10 @@ ConnectedPage::ConnectedPage(QWidget* parent) : QWidget(parent) {
 }
 
 void ConnectedPage::showConnection(const QString& serverUrl, const QString& username) {
+    // Die Seite gehört sich selbst: ein Offline-Hinweis, den niemand mehr
+    // verantworten kann, ist schlimmer als keiner. Deshalb hier selbst
+    // zurücksetzen statt sich auf den Aufrufer zu verlassen.
+    clearOffline();
     connection_->setText(tr("Verbunden mit %1 als %2").arg(serverUrl, username));
 }
 
