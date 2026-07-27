@@ -2021,7 +2021,7 @@ Die einzige Stelle im Programm, an der beide Welten sich berühren (Spec Abschni
   - `class baludesk::bridge::AuthBridge : public QObject` mit dem Konstruktor
     `AuthBridge(std::shared_ptr<core::Transport> transport, std::unique_ptr<core::SecretStore> secrets, std::string sessionPath, QString deviceId, QString deviceName, QObject* parent = nullptr)`
   - Slots: `restoreSession()`, `logout()`
-  - Signale: `noSession()`, `sessionEstablished(QString, QString)`, `serverUnreachable(QString)`, `certificateChanged(QString, QString)`, `reauthRequired(QString)`, `loggedOut()`, `logoutIncomplete(QString)`
+  - Signale: `noSession()`, `sessionEstablished(QString, QString)`, `serverUnreachable(QString, QString, QString)`, `certificateChanged(QString, QString)`, `reauthRequired(QString)`, `loggedOut()`, `logoutIncomplete(QString)`
   - CMake-Ziel `baludesk_bridge`
 
 **Was bewusst NICHT in diesem Task entsteht:** die Paarungs-Slots und
@@ -2237,6 +2237,16 @@ TEST(AuthBridgeTest, KeepsTheSessionWhenTheServerIsAsleep) {
     EXPECT_EQ(unreachable.count(), 1);
     EXPECT_EQ(reauth.count(), 0);
     EXPECT_TRUE(f.secrets->contains("session/access-token"));
+
+    // Adresse und Benutzername gehen mit, damit die Oberfläche die verbundene
+    // Ansicht mit Offline-Hinweis zeigen kann statt der Eingabeseite. Ohne
+    // diese Nutzlast wüsste sie nicht, mit wem sie gerade nicht redet - und
+    // müsste den Nutzer fragen, wo sein Server steht, obwohl er längst
+    // gepaart ist.
+    ASSERT_EQ(unreachable.at(0).size(), 3);
+    EXPECT_EQ(unreachable.at(0).at(0).toString(), QStringLiteral("https://nas.example.com"));
+    EXPECT_EQ(unreachable.at(0).at(1).toString(), QStringLiteral("sven"));
+    EXPECT_FALSE(unreachable.at(0).at(2).toString().isEmpty());
 }
 
 TEST(AuthBridgeTest, ReportsAChangedCertificate) {
@@ -2402,7 +2412,15 @@ public slots:
 signals:
     void noSession();
     void sessionEstablished(const QString& serverUrl, const QString& username);
-    void serverUnreachable(const QString& message);
+    // Trägt Adresse und Benutzernamen mit, weil die Oberfläche daraufhin die
+    // verbundene Ansicht mit Offline-Hinweis zeigt statt der Eingabeseite:
+    // ein schlafender Server ist laut Spec Abschnitt 10 Betriebszustand, und
+    // wer den Nutzer dafür zur Serveradresse zurückschickt, sagt ihm, er sei
+    // nicht gepaart. Beide Werte sind belegt, weil dieses Signal nur bei
+    // vorhandener Sitzung entsteht.
+    void serverUnreachable(const QString& serverUrl,
+                           const QString& username,
+                           const QString& message);
 
     // Der angeheftete Schlüssel passt nicht mehr, oder ein Zertifikat ohne
     // Pin lässt sich nicht mehr prüfen. Beides endet auf derselben Seite,
@@ -2526,7 +2544,9 @@ void AuthBridge::restoreSession() {
                 emit reauthRequired(tr("Die Anmeldung gilt nicht mehr. Bitte neu verbinden."));
                 return;
             }
-            emit serverUnreachable(tr("Der Server antwortet unerwartet (Status %1).")
+            emit serverUnreachable(serverUrl,
+                                   QString::fromStdString(session->username),
+                                   tr("Der Server antwortet unerwartet (Status %1).")
                                        .arg(result.response.statusCode));
             return;
 
@@ -2540,7 +2560,9 @@ void AuthBridge::restoreSession() {
             return;
 
         case core::AuthOutcome::Unreachable:
-            emit serverUnreachable(tr("Der Server ist zurzeit nicht erreichbar."));
+            emit serverUnreachable(serverUrl,
+                                   QString::fromStdString(session->username),
+                                   tr("Der Server ist zurzeit nicht erreichbar."));
             return;
     }
 }
@@ -3397,6 +3419,11 @@ void ServerUrlPage::clearMessages() {
 }
 
 void ServerUrlPage::setBusy(bool busy) {
+    // Das Eingabefeld mitsperren: die Eingabetaste hängt unabhängig vom Knopf
+    // an requestConnect() und ginge sonst an der Sperre vorbei. Ein zweiter
+    // Vorgang würde in der Bridge mit resetPairing() beginnen und damit eine
+    // gerade begonnene Paarung abräumen.
+    input_->setEnabled(!busy);
     connectButton_->setEnabled(!busy);
     connectButton_->setText(busy ? tr("Verbinde…") : tr("Verbinden"));
 }
@@ -4139,14 +4166,19 @@ void MainWindow::wireBridge() {
                 stack_->setCurrentWidget(connectedPage_);
             });
 
+    // Ein schlafender Server ist laut Spec Abschnitt 10 ein normaler
+    // Betriebszustand. Die Sitzung bleibt, also bleibt auch die verbundene
+    // Ansicht - nur mit einem Hinweis darüber. Den Nutzer hier zur
+    // Serveradresse zurückzuschicken hiesse ihm zu sagen, er sei nicht
+    // gepaart, und genau das nennt die Spec im Alltag unbrauchbar.
     connect(bridge_, &bridge::AuthBridge::serverUnreachable, this,
-            [this](const QString& message) {
-                if (stack_->currentWidget() == connectedPage_) {
-                    connectedPage_->showOffline(message);
-                    return;
-                }
-                serverUrlPage_->showProblem(message);
-                stack_->setCurrentWidget(serverUrlPage_);
+            [this](const QString& serverUrl, const QString& username,
+                   const QString& message) {
+                pairingCodePage_->stop();
+                serverUrlPage_->setBusy(false);
+                connectedPage_->showConnection(serverUrl, username);
+                connectedPage_->showOffline(message);
+                stack_->setCurrentWidget(connectedPage_);
             });
 
     connect(bridge_, &bridge::AuthBridge::serverUrlRejected,
@@ -4213,9 +4245,40 @@ void MainWindow::wireBridge() {
 }  // namespace baludesk::app
 ```
 
+- [ ] **Step 3a: curl vor `QApplication` hochfahren**
+
+`CurlTransport` fährt curls globalen Zustand bisher als Nebenwirkung seines ersten Konstruktors hoch. Der Kommentar dort hält fest, dass curls Vertrag das verlangt, **bevor andere Threads existieren** — und dass die Rechnung nur aufgeht, „solange die allererste Instanz vor `QApplication` angelegt wird". Genau das gilt ab diesem Task nicht mehr: die erste Instanz entsteht in `startAuthThread()`, lange nach `QApplication`.
+
+In `src/core/api/CurlTransport.h` im `public`-Abschnitt ergänzen:
+
+```cpp
+    // Fährt curls globalen Zustand hoch. Mehrfach aufzurufen ist unschädlich.
+    //
+    // Öffentlich und benannt, weil curls Vertrag verlangt, dass dies
+    // geschieht, bevor andere Threads existieren. Als blosse Nebenwirkung des
+    // ersten Konstruktors war das nur so lange wahr, wie zufällig niemand
+    // vorher einen Thread aufmachte - eine Zusage, die eine Oberfläche mit
+    // Arbeiterthread nicht mehr einhalten kann. Der Aufruf gehört an den
+    // Anfang von main(), vor QApplication.
+    static void initGlobals();
+```
+
+In `src/core/api/CurlTransport.cpp` den `std::call_once`-Block aus dem Konstruktor in `initGlobals()` ziehen; der Konstruktor ruft sie weiterhin auf, damit Prüfprogramm und Tests ohne Zutun richtig bleiben. Den Kommentar auf den neuen Stand bringen.
+
 - [ ] **Step 3: `src/app/main.cpp` — den Platzhaltertext ersetzen**
 
-Die Datei bleibt bis auf eine Zeile unverändert. Die Protokollzeile
+Als **allererste Anweisung** in `main()`, vor `QApplication`:
+
+```cpp
+    // Vor QApplication: curls Vertrag verlangt, dass sein globaler Zustand
+    // steht, bevor andere Threads existieren - und BaluDesk macht in
+    // MainWindow einen auf.
+    baludesk::core::CurlTransport::initGlobals();
+```
+
+samt `#include "core/api/CurlTransport.h"` im Include-Block.
+
+Die Datei bleibt sonst bis auf eine Zeile unverändert. Die Protokollzeile
 
 ```cpp
     baludesk::core::Logger::info("Abfrageintervall: {} s", config.pollIntervalSeconds);
@@ -4246,7 +4309,7 @@ ctest --preset debug
 Erwartet: 179 Tests grün, keine Warnungen aus eigenem Code.
 
 ```powershell
-.\build\msvc2022\Debug\baludesk.exe
+.\build\msvc2022\src\app\Debug\baludesk.exe
 ```
 
 Erwartet: Das Fenster erscheint. Ist bereits eine Sitzung aus einem früheren Prüfprogramm-Lauf abgelegt, steht dort binnen einer Sekunde „Verbunden mit … als …"; sonst die Eingabe der Serveradresse.
