@@ -108,9 +108,15 @@ void AuthBridge::restoreSession() {
 void AuthBridge::logout() {
     const bool complete = repository_->clear();
 
+    // ABBAUREIHENFOLGE IST TRAGEND: TrustNegotiation und AuthenticatedClient
+    // halten je eine HttpClient& und sagen in ihren Kopfdateien zu, dass er
+    // sie überlebt. resetPairing() räumt trust_ und pairing_ ab, also gehört
+    // es vor die beiden reset()-Aufrufe - erreichbar ist der Fall über den
+    // Zweig PinMismatch in connectToServer(), nach dem trust_ und http_ noch
+    // leben, wenn der Nutzer „Abmelden und neu verbinden" wählt.
+    resetPairing();
     authenticated_.reset();
     http_.reset();
-    resetPairing();
 
     if (complete) {
         emit loggedOut();
@@ -142,6 +148,12 @@ void AuthBridge::connectToServer(const QString& rawUrl) {
 
     pendingServerUrl_ = QString::fromStdString(check.normalized);
 
+    // Wie in logout(): der bisherige AuthenticatedClient hält eine Referenz
+    // auf den alten HttpClient und muss weg, bevor dieser ersetzt wird.
+    // Erreichbar über restoreSession() mit ReauthRequired - das lässt die
+    // Sitzung stehen, und der Nutzer gibt daraufhin eine Adresse ein.
+    authenticated_.reset();
+
     // Frische Verbindung mit voller Prüfung. Ein etwa früher angehefteter
     // Schlüssel gehört zu einer anderen Bindung und hätte hier nichts zu
     // suchen.
@@ -162,6 +174,11 @@ void AuthBridge::connectToServer(const QString& rawUrl) {
         case core::TrustState::PinMismatch:
             emit certificateChanged(pendingServerUrl_,
                                     QString::fromStdString(trust_->message()));
+            // Erst melden, dann abräumen: die Meldung liest pendingServerUrl_
+            // und trust_. Ohne das Abräumen bliebe ein Vorgang stehen, den
+            // niemand mehr fortsetzen kann - und ein verspäteter Klick auf
+            // „Abbrechen" fände ihn vor.
+            resetPairing();
             return;
 
         case core::TrustState::Unreachable:
@@ -188,11 +205,27 @@ void AuthBridge::confirmCertificate() {
 }
 
 void AuthBridge::rejectCertificate() {
+    // Derselbe Wächter wie in pollNow(), aus demselben Grund: die Oberfläche
+    // stellt ihre Aufrufe in die Warteschlange dieses Threads, während hier
+    // noch ein blockierender Aufruf läuft. Ohne den Wächter meldete ein
+    // längst überholter Klick pairingCancelled - und die Oberfläche wechselt
+    // darauf bedingungslos zur Eingabeseite zurück.
+    if (!trust_) {
+        return;
+    }
+
     resetPairing();
     emit pairingCancelled();
 }
 
 void AuthBridge::cancelPairing() {
+    // Siehe rejectCertificate(): ein Abbruch, der eine bereits abgelegte
+    // Sitzung von der Anzeige risse, wäre der teuerste Fall - die Token
+    // liegen dann auf der Platte, und die Anwendung behauptet das Gegenteil.
+    if (!pairing_) {
+        return;
+    }
+
     resetPairing();
     emit pairingCancelled();
 }

@@ -407,3 +407,102 @@ TEST(AuthBridgeTest, CancelDuringPollingStopsTheAttempt) {
     f.bridge->pollNow();
     EXPECT_EQ(f.transport->calls.size(), callsBefore);
 }
+
+TEST(AuthBridgeTest, CancelWithoutARunningPairingSaysNothing) {
+    Fixture f;
+    QSignalSpy cancelled(f.bridge.get(), &AuthBridge::pairingCancelled);
+
+    f.bridge->cancelPairing();
+
+    // Die Oberfläche stellt ihre Aufrufe in die Warteschlange dieses Threads.
+    // Ein Klick auf „Abbrechen", der erst abgearbeitet wird, nachdem die
+    // Paarung durch ist, meldete sonst einen Abbruch - und die Oberfläche
+    // wechselt darauf bedingungslos zur Eingabeseite zurück.
+    EXPECT_EQ(cancelled.count(), 0);
+}
+
+TEST(AuthBridgeTest, ALateCancelLeavesTheEstablishedSessionAlone) {
+    Fixture f;
+    f.transport->queueResult(jsonResult(200, R"({"status":"ok"})"));
+    f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
+    f.bridge->connectToServer(QStringLiteral("nas.example.com"));
+
+    f.transport->queueResult(jsonResult(200, kApprovedResponse));
+    QSignalSpy established(f.bridge.get(), &AuthBridge::sessionEstablished);
+    f.bridge->pollNow();
+    ASSERT_EQ(established.count(), 1);
+
+    QSignalSpy cancelled(f.bridge.get(), &AuthBridge::pairingCancelled);
+    f.bridge->cancelPairing();
+
+    // Die Token liegen auf der Platte. Ein Abbruch, der jetzt noch gemeldet
+    // würde, liesse die Anwendung das Gegenteil behaupten.
+    EXPECT_EQ(cancelled.count(), 0);
+    EXPECT_TRUE(QFile::exists(f.directory.filePath(QStringLiteral("session.json"))));
+}
+
+TEST(AuthBridgeTest, RejectingWithoutAPendingCertificateSaysNothing) {
+    Fixture f;
+    QSignalSpy cancelled(f.bridge.get(), &AuthBridge::pairingCancelled);
+
+    f.bridge->rejectCertificate();
+
+    EXPECT_EQ(cancelled.count(), 0);
+}
+
+TEST(AuthBridgeTest, AMismatchingPinEndsTheAttemptAndNotOnlyReportsIt) {
+    Fixture f;
+    f.transport->queueResult(failure(HttpErrorKind::CertificatePinMismatch, "pinned key mismatch"));
+
+    QSignalSpy changed(f.bridge.get(), &AuthBridge::certificateChanged);
+    f.bridge->connectToServer(QStringLiteral("nas.example.com"));
+    ASSERT_EQ(changed.count(), 1);
+
+    // Bei abweichendem Pin bricht die Verbindung hart ab (Spec 2.9). Bliebe
+    // der Vorgang stehen, fände ihn ein nachlaufender Klick vor - und der
+    // Nutzer landete über pairingCancelled wieder in einem Ablauf, den es
+    // nicht mehr gibt.
+    QSignalSpy cancelled(f.bridge.get(), &AuthBridge::pairingCancelled);
+    f.bridge->rejectCertificate();
+    EXPECT_EQ(cancelled.count(), 0);
+}
+
+TEST(AuthBridgeTest, LogoutWorksAfterAMismatchingPin) {
+    Fixture f;
+    storeSession(f.sessionPath(), *f.secrets);
+    f.transport->queueResult(failure(HttpErrorKind::CertificatePinMismatch, "pinned key mismatch"));
+    f.bridge->connectToServer(QStringLiteral("nas.example.com"));
+
+    QSignalSpy loggedOut(f.bridge.get(), &AuthBridge::loggedOut);
+    f.bridge->logout();
+
+    // Der Weg, auf dem die Zertifikatsseite ins Abmelden führt. Er ist der
+    // einzige, auf dem trust_ und http_ beim Abmelden beide noch leben -
+    // deshalb steht er hier festgeschrieben.
+    EXPECT_EQ(loggedOut.count(), 1);
+    EXPECT_TRUE(f.secrets->entries.empty());
+}
+
+TEST(AuthBridgeTest, ConnectingAfterAReauthRequiredStartsWithFullVerification) {
+    Fixture f;
+    storeSession(f.sessionPath(), *f.secrets);
+    f.transport->queueResult(jsonResult(401, "{}"));
+    f.transport->queueResult(jsonResult(401, R"({"detail":"Invalid refresh token"})"));
+
+    QSignalSpy reauth(f.bridge.get(), &AuthBridge::reauthRequired);
+    f.bridge->restoreSession();
+    ASSERT_EQ(reauth.count(), 1);
+
+    // ReauthRequired lässt die Sitzung stehen; der Nutzer gibt daraufhin eine
+    // Adresse ein, und die Bridge baut ihre Verbindung neu auf.
+    f.transport->queueResult(jsonResult(200, R"({"status":"ok"})"));
+    f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
+
+    QSignalSpy ready(f.bridge.get(), &AuthBridge::pairingCodeReady);
+    f.bridge->connectToServer(QStringLiteral("nas.example.com"));
+
+    EXPECT_EQ(ready.count(), 1);
+    ASSERT_FALSE(f.transport->calls.empty());
+    EXPECT_EQ(f.transport->calls.back().policy.mode,
+              baludesk::core::TlsPolicy::Mode::SystemTrust);
+}
