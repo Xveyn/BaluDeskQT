@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <memory>
 #include <string>
 
@@ -237,6 +238,25 @@ TEST(PairingClientTest, BacksOffWhenTheServerReportsTooManyRequests) {
     // der Server im Rumpf angibt. Kopfzeilen trägt HttpResponse nicht.
     EXPECT_EQ(progress.state, PairingState::WaitingForApproval);
     EXPECT_EQ(progress.waitSeconds, 37);
+}
+
+TEST(PairingClientTest, CapsAnAbsurdRetryAfterFromTheServer) {
+    Fixture f;
+    f.transport->queueResult(jsonResult(200, kDeviceCodeResponse));
+    f.client->begin("geraet-1", "Rechner", 1000);
+
+    f.transport->queueResult(jsonResult(
+        429, R"({"error":"Too Many Requests","retry_after":2500000})"));
+    const auto progress = f.client->poll(1005);
+
+    // retry_after ist Fremdeingabe aus dem Rumpf der Serverantwort. Ungeprüft
+    // weitergereicht überläuft dieser Wert bei der Umrechnung in
+    // Millisekunden den Wertebereich von int - ein Zeitgeber bekäme einen
+    // negativen Wert und liefe nie wieder an, die Paarung hinge still.
+    EXPECT_EQ(progress.state, PairingState::WaitingForApproval);
+    EXPECT_GT(progress.waitSeconds, 0);
+    EXPECT_LE(progress.waitSeconds, 600);
+    EXPECT_LT(progress.waitSeconds, std::numeric_limits<int>::max() / 1000);
 }
 
 TEST(PairingClientTest, FallsBackToASaneDelayWhenRetryAfterIsMissing) {

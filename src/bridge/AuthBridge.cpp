@@ -250,7 +250,12 @@ void AuthBridge::beginPairing() {
     // Das vom Server vorgegebene Intervall ist einzuhalten und nicht zu
     // unterbieten: bei 12 zugelassenen Abrufen je Minute und 5 Sekunden
     // Vorgabe gibt es keine Reserve.
-    pollTimer_->start(progress.waitSeconds * 1000);
+    //
+    // std::chrono statt einer Multiplikation mit 1000: die Einheit steht
+    // damit im Typ, und die Umrechnung kann nicht mehr über den Wertebereich
+    // von int laufen. Begrenzt wird der Wert selbst in PairingClient, wo die
+    // Grenze für jeden Aufrufer gilt.
+    pollTimer_->start(std::chrono::seconds(progress.waitSeconds));
 }
 
 void AuthBridge::pollNow() {
@@ -264,7 +269,7 @@ void AuthBridge::pollNow() {
         if (!progress.message.empty()) {
             emit pairingNotice(QString::fromStdString(progress.message));
         }
-        pollTimer_->start(progress.waitSeconds * 1000);
+        pollTimer_->start(std::chrono::seconds(progress.waitSeconds));
         return;
     }
 

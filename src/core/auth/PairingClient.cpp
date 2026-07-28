@@ -26,6 +26,22 @@ constexpr int kFallbackBackoffSeconds = 60;
 // und nicht unterboten, auch nach einem Netzfehler nicht.
 constexpr int kNetworkRetrySeconds = 10;
 
+// Obergrenze für jede Wartezeit, die dieser Client herausgibt.
+//
+// Der Wert bei 429 stammt aus dem Rumpf der Serverantwort und ist damit
+// ungeprüfte Fremdeingabe. Ohne Deckel läuft schon die naheliegendste
+// Verwendung über: wer Sekunden in Millisekunden umrechnet, überschreitet mit
+// retry_after ab rund 2,1 Millionen den Wertebereich von int, und ein
+// Zeitgeber, der daraufhin einen negativen Wert bekommt, läuft nie wieder an -
+// die Paarung hinge still, bis der Code verfällt. Die Grenze gehört deshalb
+// hierher und nicht zum einzelnen Aufrufer.
+//
+// 600 Sekunden, weil ein Gerätecode üblicherweise zehn Minuten lebt: länger zu
+// warten heisst, auf einen Code zu warten, den es dann nicht mehr gibt. Wird
+// so lange gewartet, meldet der nächste poll() den Ablauf im Klartext, statt
+// zu schweigen.
+constexpr int kMaxWaitSeconds = 600;
+
 std::optional<nlohmann::json> parse(const std::string& body) {
     auto document = nlohmann::json::parse(body, nullptr, false);
     if (document.is_discarded() || !document.is_object()) {
@@ -67,7 +83,9 @@ PairingProgress PairingClient::waiting(int waitSeconds, std::string message) {
     state_ = PairingState::WaitingForApproval;
     PairingProgress progress;
     progress.state = PairingState::WaitingForApproval;
-    progress.waitSeconds = waitSeconds;
+    // Die einzige Stelle, an der ein Wartewert dieses Objekt verlässt - der
+    // Deckel gilt damit für jeden Aufrufer und für jede Quelle des Wertes.
+    progress.waitSeconds = std::min(waitSeconds, kMaxWaitSeconds);
     progress.message = std::move(message);
     return progress;
 }
