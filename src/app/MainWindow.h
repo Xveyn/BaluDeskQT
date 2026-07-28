@@ -16,6 +16,7 @@ class CertificatePage;
 class ConnectedPage;
 class PairingCodePage;
 class ServerUrlPage;
+class StartupPage;
 
 // Hauptfenster: ein Stapel von Ansichten und der Eigentümer des
 // Arbeiterthreads.
@@ -29,15 +30,35 @@ class MainWindow : public QMainWindow {
 
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+
+    // Nimmt eine fertige Bridge entgegen und übernimmt sie. Für die Tests:
+    // die selbst gebaute Bridge fasst den echten Anmeldeinformationsspeicher
+    // und das echte Netz an, und beides hat in einem Testlauf nichts zu
+    // suchen. Die Bridge darf noch keinem Thread zugeordnet sein.
+    explicit MainWindow(bridge::AuthBridge* bridge, QWidget* parent = nullptr);
+
     ~MainWindow() override;
 
+    // Die gerade sichtbare Seite. Ebenfalls für die Tests: welche Seite beim
+    // Start steht, ist eine Zusicherung dieser Klasse - und ohne diesen Blick
+    // von aussen nur von Hand zu prüfen.
+    [[nodiscard]] QWidget* currentPage() const;
+
 private:
+    // Baut die Bridge, wie die Anwendung sie braucht: echter Transport,
+    // echter Anmeldeinformationsspeicher, echter Ablagepfad.
+    static bridge::AuthBridge* createBridge();
+
+    // Der gemeinsame Rumpf beider Konstruktoren.
+    void initialise(bridge::AuthBridge* bridge);
+
     void buildPages();
     void startAuthThread();
     void wireBridge();
 
     QStackedWidget* stack_ = nullptr;
 
+    StartupPage* startupPage_ = nullptr;
     ServerUrlPage* serverUrlPage_ = nullptr;
     CertificatePage* certificatePage_ = nullptr;
     PairingCodePage* pairingCodePage_ = nullptr;

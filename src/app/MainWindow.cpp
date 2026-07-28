@@ -9,6 +9,7 @@
 
 #include "app/ConnectedPage.h"
 #include "app/SettingsStore.h"
+#include "app/StartupPage.h"
 #include "app/pairing/CertificateChangedPage.h"
 #include "app/pairing/CertificatePage.h"
 #include "app/pairing/PairingCodePage.h"
@@ -21,8 +22,28 @@
 namespace baludesk::app {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+    initialise(createBridge());
+}
+
+MainWindow::MainWindow(bridge::AuthBridge* bridge, QWidget* parent) : QMainWindow(parent) {
+    initialise(bridge);
+}
+
+bridge::AuthBridge* MainWindow::createBridge() {
+    SettingsStore settings;
+
+    return new bridge::AuthBridge(std::make_shared<core::CurlTransport>(),
+                                  std::make_unique<core::WindowsCredentialStore>(),
+                                  core::defaultSessionPath(),
+                                  settings.deviceId(),
+                                  SettingsStore::deviceName());
+}
+
+void MainWindow::initialise(bridge::AuthBridge* bridge) {
     setWindowTitle(QStringLiteral("BaluDesk %1").arg(QCoreApplication::applicationVersion()));
     resize(900, 600);
+
+    bridge_ = bridge;
 
     buildPages();
     startAuthThread();
@@ -31,6 +52,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // Erst jetzt fragen: die Verbindungen müssen stehen, sonst geht die
     // Antwort ins Leere.
     QMetaObject::invokeMethod(bridge_, "restoreSession", Qt::QueuedConnection);
+}
+
+QWidget* MainWindow::currentPage() const {
+    return stack_->currentWidget();
 }
 
 MainWindow::~MainWindow() {
@@ -44,31 +69,42 @@ MainWindow::~MainWindow() {
 void MainWindow::buildPages() {
     stack_ = new QStackedWidget(this);
 
+    startupPage_ = new StartupPage(this);
     serverUrlPage_ = new ServerUrlPage(this);
     certificatePage_ = new CertificatePage(this);
     pairingCodePage_ = new PairingCodePage(this);
     certificateChangedPage_ = new CertificateChangedPage(this);
     connectedPage_ = new ConnectedPage(this);
 
+    stack_->addWidget(startupPage_);
     stack_->addWidget(serverUrlPage_);
     stack_->addWidget(certificatePage_);
     stack_->addWidget(pairingCodePage_);
     stack_->addWidget(certificateChangedPage_);
     stack_->addWidget(connectedPage_);
 
-    stack_->setCurrentWidget(serverUrlPage_);
+    // Bis zur ersten Antwort der Bridge eine eigene Seite statt der
+    // Eingabeseite. restoreSession() läuft im Arbeiterthread und kann bei
+    // einem schlafenden Server bis zu 30 Sekunden brauchen (in der Abnahme
+    // von Hand belegt mit „Connection timed out after 10015 milliseconds").
+    // Wer solange „Mit einem Server verbinden" liest, hält sich für
+    // ungepaart - und genau diese Aufforderung verbietet Spec Abschnitt 10.
+    //
+    // Erwogen und verworfen: serverUrlPage_->setBusy(true) von Beginn an. Das
+    // sperrt zwar die Eingabe, zeigt aber weiterhin denselben Text, nur
+    // ausgegraut - die falsche Auskunft bliebe stehen. Eine eigene Seite sagt
+    // stattdessen, was tatsächlich geschieht, und bietet nichts an, was sich
+    // hineintippen liesse.
+    //
+    // Der Startzustand ist keine Sackgasse: restoreSession() meldet genau
+    // eines von noSession, sessionEstablished, serverUnreachable,
+    // reauthRequired und certificateChanged, und jedes dieser fünf Signale
+    // wechselt in wireBridge() die Seite.
+    stack_->setCurrentWidget(startupPage_);
     setCentralWidget(stack_);
 }
 
 void MainWindow::startAuthThread() {
-    SettingsStore settings;
-
-    bridge_ = new bridge::AuthBridge(std::make_shared<core::CurlTransport>(),
-                                     std::make_unique<core::WindowsCredentialStore>(),
-                                     core::defaultSessionPath(),
-                                     settings.deviceId(),
-                                     SettingsStore::deviceName());
-
     authThread_ = new QThread(this);
     bridge_->moveToThread(authThread_);
     connect(authThread_, &QThread::finished, bridge_, &QObject::deleteLater);

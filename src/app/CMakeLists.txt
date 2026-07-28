@@ -7,6 +7,7 @@ add_library(baludesk_app_lib STATIC
     SettingsStore.cpp
     QtLogBridge.cpp
     ConnectedPage.cpp
+    StartupPage.cpp
     pairing/Countdown.cpp
     pairing/ServerUrlPage.cpp
     pairing/CertificatePage.cpp
