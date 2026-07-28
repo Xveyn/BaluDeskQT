@@ -646,7 +646,7 @@ gelingt.
 
 ### Stufe 1c — Pairing-Oberfläche und Token-Erneuerung (abgenommen 2026-07-28)
 
-179 Tests. Die Abnahme wurde gegen den laufenden Server gefahren, weil der
+195 Tests. Die Abnahme wurde gegen den laufenden Server gefahren, weil der
 entscheidende Schritt einen Menschen am Browser verlangt.
 
 | Prüfung | Ergebnis |
@@ -692,6 +692,24 @@ schlafende Server zeigte die Eingabeseite statt der verbundenen Ansicht, weil
 `serverUnreachable` Adresse und Benutzernamen nicht mittrug (Runde 2). Der
 zweite Fall war vom Reviewer nur als toter Zweig gemeldet worden; dass die Spec
 genau dieses Verhalten verlangt, fiel erst beim Abgleich auf.
+
+**Der Abschluss-Review über den ganzen Zweig fand danach noch zwei Fehler, die
+keinem der acht task-begrenzten Reviews auffallen konnten**, weil beide über
+Task-Grenzen hinweg entstehen. `cancelPairing()` sendete ohne Wächter: ein
+„Abbrechen"-Klick, der sich hinter einem laufenden `poll()` einreiht, warf die
+Oberfläche auf die Eingabeseite, obwohl die Sitzung schon abgelegt war — die
+Anwendung behauptete das Gegenteil dessen, was auf der Platte stand. Und der
+Kaltstart zeigte bis zu 30 Sekunden die Eingabeseite, bevor `restoreSession()`
+antwortete: derselbe Verstoß gegen Abschnitt 10 wie oben, nur transient und
+deshalb bei der Abnahme von Hand nicht aufgefallen. Behoben durch Wächter und
+eine eigene `StartupPage`; die Tests stiegen dabei von 179 auf 195.
+
+Die Abnahme von Hand lief zunächst gegen den Stand vor diesen Behebungen. Weil
+sie Verhalten auf geprüften Pfaden ändern, wurden die berührten Zeilen gegen den
+Auslieferungsstand nachgefahren — einschließlich zweier neuer Belege: ein
+Doppelklick auf „Vertrauen und fortfahren" erzeugt genau **einen** Gerätecode,
+und bei angehaltenem Server steht während der Wartezeit „Verbindung wird
+geprüft…" statt eines bedienbaren Eingabefelds.
 
 ---
 
