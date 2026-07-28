@@ -277,18 +277,34 @@ BaluDesk QT/
 │   ├── core/
 │   │   ├── sync/            # SyncCoordinator, Reconciler, TransferWorker,
 │   │   │                    # FileWatcher (+ _windows/_linux/_macos), ConflictResolver
-│   │   ├── api/             # HttpClient, CurlHandlePool, RateLimiter, RemoteFileService
+│   │   ├── api/             # HttpClient, CurlHandlePool, RateLimiter, RemoteFileService,
+│   │   │                    # ServerUrl, TlsPolicy, TrustNegotiation
+│   │   ├── auth/            # PairingClient, AuthenticatedClient, Session,
+│   │   │                    # SessionRepository, SessionPaths
 │   │   ├── db/              # SyncDatabase
-│   │   └── util/            # Sha256, CredentialStore, Logger, WakeOnLan
-│   ├── bridge/              # SyncEngineBridge, FileBrowserBridge
+│   │   └── util/            # Sha256, CredentialStore, Logger, TlsTrust, WakeOnLan
+│   ├── bridge/              # AuthBridge, SyncEngineBridge, FileBrowserBridge
 │   └── app/
 │       ├── MainWindow, TrayController, NotificationCenter
 │       ├── pairing/ dashboard/ sync/ explorer/ settings/ conflicts/
 │       └── models/          # SyncFolderModel, ConflictModel, RemoteFileModel
-├── tests/                   # GTest gegen core/
+├── tests/
+│   ├── core/                # GTest gegen core/, mit support/ und data/
+│   ├── bridge/              # GTest gegen bridge/
+│   └── app/                 # GTest gegen app/
+├── tools/probe/             # baludesk_probe — Ablauf von der Kommandozeile
 ├── resources/               # SVG-Symbole, QSS-Stylesheet
 └── docs/superpowers/specs/  # dieses Dokument
 ```
+
+Stand nach Stufe 1c gebaut: `core/api/`, `core/auth/`, `core/util/`, `bridge/`
+(darin bisher nur `AuthBridge`), `app/pairing/`, `tools/probe/` und die drei
+Testverzeichnisse. `core/sync/`, `core/db/` und die übrigen `app/`-Bereiche
+kommen ab Stufe 2.
+
+Die Testverzeichnisse spiegeln die Schichten. Ein Include in Anführungszeichen
+sucht zuerst neben der einbindenden Datei: aus `tests/bridge/` heißt es deshalb
+`"core/support/FakeTransport.h"`, nicht `"support/FakeTransport.h"`.
 
 ### 5.2 Build
 
@@ -625,6 +641,57 @@ repariert worden war: der Rückbau sicherte zwar die Geheimnisse, aber das Öffn
 Datei mit `trunc` zerstörte sie vorher. Behoben durch Schreiben in eine Nebendatei und
 atomares Umbenennen — die bestehende Datei bleibt unangetastet, bis das Umbenennen
 gelingt.
+
+---
+
+### Stufe 1c — Pairing-Oberfläche und Token-Erneuerung (abgenommen 2026-07-28)
+
+179 Tests. Die Abnahme wurde gegen den laufenden Server gefahren, weil der
+entscheidende Schritt einen Menschen am Browser verlangt.
+
+| Prüfung | Ergebnis |
+|---|---|
+| `http://baluhost.duckdns.org` | sofort abgelehnt, ohne Netzkontakt: „Unverschlüsseltes http ist nur zu localhost erlaubt." |
+| `ftp://baluhost.duckdns.org` | abgelehnt, eigene Meldung: „Nur http und https werden unterstützt, nicht „ftp"." |
+| `baluhost.duckdns.org` | Codeanzeige mit Code, Link und Countdown, ohne Zertifikatsnachfrage |
+| Fenster während der Codeanzeige auf Vollbild gezogen | reagierte flüssig, Layout hielt — der Arbeiterthread trägt |
+| Im Browser angemeldet, Code eingegeben, freigegeben | Ansicht wechselte **selbsttätig** auf „Verbunden mit … als admin" |
+| Geräteliste der Web-Oberfläche | `Sven-PC · Desktop · admin · active`, vom Server selbst registriert |
+| **Beenden und neu starten** | **sofort verbunden, ohne Paaren** |
+| `session.json` | nur Adresse, Benutzername, Pin — **kein Token** |
+| Fünfmal gepaart, mit Abmelden dazwischen | **ein** Geräteeintrag, `Registered` blieb bei der ersten Registrierung |
+| `baluhost.local` | Fingerabdruck mit konkretem Grund: `no alternative certificate subject name matches target hostname` |
+| Fingerabdruck gegen Stufe 1b | zeichengenau gleich, zusätzlich mit openssl nachgerechnet |
+| Bestätigt und freigegeben | gepaart; `session.json` trägt den Pin aus Stufe 1a und 1b |
+| Ein Zeichen des Pins verfälscht, gestartet | Seite „Das Zertifikat hat sich geändert" mit `public key does not match pinned public key` |
+| „Abmelden und neu verbinden" | `session.json` entfernt, zurück zur Eingabe |
+| Auf der Zertifikatsseite „Abbrechen" | zurück zur Eingabe, **nichts angeheftet** |
+| Während der Codeanzeige „Abbrechen" | zurück zur Eingabe |
+| **Server angehalten, mit gültiger Sitzung gestartet** | **bleibt verbunden, Offline-Hinweis, verlangt kein Neupaaren** |
+| Protokolldatei | „Sitzungsablage: …" nennt denselben Pfad wie `baludesk_probe` |
+
+Damit ist das Abnahmekriterium aus Abschnitt 12 erstmals über die Anwendung
+selbst erreicht statt über das Prüfprogramm.
+
+Die vorletzte Zeile ist die wichtigste nach dem Neustart: Abschnitt 10 macht den
+schlafenden Server zum Normalzustand. Die Anwendung hielt die verbundene Ansicht
+samt Adresse und Benutzernamen und ergänzte nur einen Hinweis — bei einem echten
+Zeitablauf von zehn Sekunden, nicht bei einem nachgestellten Fehler.
+
+Das Zertifikat wurde auf drei unabhängigen Wegen bestätigt: die Anwendung zeigte
+denselben Fingerabdruck, den openssl berechnete, und heftete denselben
+öffentlichen Schlüssel an, den die Stufe-1b-Abnahme zwei Tage zuvor abgelegt
+hatte. Bei der Pin-Abweichung wurde zum ersten Mal in der Oberfläche sichtbar,
+was Stufe 1a als Kern belegt hatte: sie ist von einem unbekannten Zertifikat
+unterscheidbar, und die Seite bietet folgerichtig **keinen** Knopf „trotzdem
+verbinden".
+
+Zwei Befunde kamen erst beim Gegenlesen der Reviews ans Licht, nicht aus den
+Tests: curl wurde vor `QApplication` hochgefahren (Task 8, Runde 1), und der
+schlafende Server zeigte die Eingabeseite statt der verbundenen Ansicht, weil
+`serverUnreachable` Adresse und Benutzernamen nicht mittrug (Runde 2). Der
+zweite Fall war vom Reviewer nur als toter Zweig gemeldet worden; dass die Spec
+genau dieses Verhalten verlangt, fiel erst beim Abgleich auf.
 
 ---
 
