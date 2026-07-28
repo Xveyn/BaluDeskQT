@@ -142,6 +142,7 @@ Hinweis darüber.
 ```
 src/app/                     GUI-Thread, nur Qt
 ├── MainWindow               QStackedWidget; besitzt QThread und AuthBridge
+├── StartupPage              „Verbindung wird geprüft…" bis zur ersten Antwort
 ├── pairing/
 │   ├── ServerUrlPage            Adresse eingeben
 │   ├── CertificatePage          Fingerabdruck zeigen und bestätigen
@@ -248,19 +249,27 @@ Zugangstoken, abgelegt über `saveAccessToken()`.
 ### 4.1 Start
 
 ```
+MainWindow: StartupPage                               [bis zur ersten Antwort]
 MainWindow -> AuthBridge::restoreSession()            [Auth-Thread]
   Session laden
    ├─ keine       -> noSession()                          -> ServerUrlPage
    └─ vorhanden   -> AuthenticatedClient.get("/api/auth/me")
         ├─ Ok / Refreshed -> sessionEstablished(url, user) -> ConnectedPage
         ├─ ReauthRequired -> reauthRequired(text)          -> ServerUrlPage + Hinweis
-        ├─ TrustBroken    -> certificateChanged(url)       -> CertificateChangedPage
+        ├─ TrustBroken    -> certificateChanged(url, grund, angeheftet)
+        │                                                  -> CertificateChangedPage
         └─ Unreachable    -> serverUnreachable(text)       -> ConnectedPage, Zustand „offline"
 ```
 
 Ein nicht erreichbarer Server ist laut Spec Abschnitt 10 ein normaler Betriebszustand. Die
 Sitzung bleibt dabei bestehen; sie wird ausschließlich bei `ReauthRequired` als hinfällig
 behandelt.
+
+Bis zur ersten Antwort steht die `StartupPage` und nicht die `ServerUrlPage`: `restoreSession()`
+blockiert im Auth-Thread bis zu 30 Sekunden, und eine Eingabeseite in dieser Zeit fordert den
+Nutzer zum Neupaaren auf, obwohl er gepaart ist — genau das, was Abschnitt 10 verbietet. Sie
+hat kein Eingabefeld und keinen Knopf; herausgeführt wird sie von jedem der fünf Signale, mit
+denen `restoreSession()` endet.
 
 ### 4.2 Paaren
 
@@ -274,7 +283,7 @@ ServerUrlPage --connectToServer(url)--> checkServerUrl()        [core, nicht im 
         │                          --confirmCertificate()--> confirm()
         │                               ├─ Trusted -> weiter
         │                               └─ sonst   -> pairingFailed(msg)
-        ├─ PinMismatch          -> certificateChanged(url)
+        ├─ PinMismatch          -> certificateChanged(url, grund, angeheftet)
         └─ Unreachable / Failed -> pairingFailed(msg)
 
 weiter: PairingClient::begin(deviceId, deviceName, now)
@@ -300,6 +309,14 @@ führt ebenfalls dorthin zurück; der Gerätecode verfällt beim Server von selb
 nichts zurückzunehmen. Beide melden dasselbe Signal `pairingCancelled()`, damit die
 Oberfläche einen und nicht zwei Rückwege kennt.
 
+Beide prüfen zuerst, ob es überhaupt etwas abzubrechen gibt, und schweigen sonst: die
+Oberfläche stellt ihre Aufrufe in die Warteschlange des Auth-Threads, während dort noch ein
+blockierender Aufruf läuft. Ein Klick, der erst nach der Freigabe abgearbeitet wird, meldete
+sonst einen Abbruch — und die Oberfläche wechselt darauf zur `ServerUrlPage`, obwohl die
+Sitzung vollständig abgelegt ist. Aus demselben Grund sperrt die `CertificatePage` beide
+Knöpfe, sobald einer gedrückt wurde: ein zweiter Klick erzeugte einen zweiten Gerätecode und
+verbrauchte die Grenze von drei Anfragen je Minute.
+
 ### 4.3 Abmelden
 
 `ConnectedPage --logout()--> repository.clear()`. Der Rückgabewert wird ausgewertet:
@@ -317,7 +334,8 @@ bleibt ein Token zurück, sagt die Oberfläche das, statt „erledigt" zu melden
 `serverUnreachable(QString serverUrl, QString username, QString message)`,
 `serverUrlRejected(QString)`,
 `certificateConfirmationRequired(QString fingerprint, QString reason)`,
-`certificateChanged(QString serverUrl)`, `pairingCodeReady(QString code, QString url, int expiresIn)`,
+`certificateChanged(QString serverUrl, QString reason, bool hadPinnedKey)`,
+`pairingCodeReady(QString code, QString url, int expiresIn)`,
 `pairingNotice(QString)`, `pairingFailed(QString)`, `pairingCancelled()`,
 `reauthRequired(QString)`, `loggedOut()`, `logoutIncomplete(QString)`
 
