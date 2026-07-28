@@ -93,8 +93,14 @@ void AuthBridge::restoreSession() {
             return;
 
         case core::AuthOutcome::TrustBroken:
+            // Ein leerer Pin heisst: beim Verbinden war das Zertifikat
+            // regulär vertrauenswürdig, es wurde nie eines bestätigt und
+            // nichts angeheftet. Dann ist auch keines ausgetauscht worden -
+            // die reguläre Prüfung schlägt jetzt fehl, etwa weil das
+            // Zertifikat abgelaufen ist.
             emit certificateChanged(serverUrl,
-                                    QString::fromStdString(result.response.detail));
+                                    QString::fromStdString(result.response.detail),
+                                    !session->publicKeyPin.empty());
             return;
 
         case core::AuthOutcome::Unreachable:
@@ -172,8 +178,13 @@ void AuthBridge::connectToServer(const QString& rawUrl) {
             return;
 
         case core::TrustState::PinMismatch:
+            // Hier ist nichts angeheftet: dieser HttpClient wurde eben mit
+            // voller Prüfung und ohne Pin gebaut. Der Zweig steht für den
+            // Fall, dass ein Umbau des Transports das ändert - was er meldet,
+            // ist dann trotzdem kein Bruch mit einem bestätigten Schlüssel.
             emit certificateChanged(pendingServerUrl_,
-                                    QString::fromStdString(trust_->message()));
+                                    QString::fromStdString(trust_->message()),
+                                    !trust_->confirmedPin().empty());
             // Erst melden, dann abräumen: die Meldung liest pendingServerUrl_
             // und trust_. Ohne das Abräumen bliebe ein Vorgang stehen, den
             // niemand mehr fortsetzen kann - und ein verspäteter Klick auf

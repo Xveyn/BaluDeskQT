@@ -101,7 +101,17 @@ signals:
     // Pin lässt sich nicht mehr prüfen. Beides endet auf derselben Seite,
     // braucht dort aber verschiedene Sätze - daher der Grund als zweites
     // Argument.
-    void certificateChanged(const QString& serverUrl, const QString& reason);
+    //
+    // Den Fall unterscheiden kann der Grund allein nicht: er ist der Klartext
+    // der Gegenstelle und sagt nichts darüber, ob je ein Schlüssel angeheftet
+    // wurde. Genau das trägt hadPinnedKey. Ohne dieses dritte Argument
+    // behauptet die Seite auch dann, der Server weise ein anderes Zertifikat
+    // vor „als das beim Verbinden bestätigte", wenn nie etwas bestätigt und
+    // nichts angeheftet wurde - bei einem öffentlich vertrauenswürdigen
+    // Zertifikat, das schlicht abgelaufen ist, ist das eine falsche Diagnose.
+    void certificateChanged(const QString& serverUrl,
+                            const QString& reason,
+                            bool hadPinnedKey);
 
     void reauthRequired(const QString& message);
     void loggedOut();

@@ -176,9 +176,9 @@ void MainWindow::wireBridge() {
             });
 
     connect(bridge_, &bridge::AuthBridge::certificateChanged, this,
-            [this](const QString& serverUrl, const QString& reason) {
+            [this](const QString& serverUrl, const QString& reason, bool hadPinnedKey) {
                 pairingCodePage_->stop();
-                certificateChangedPage_->showChange(serverUrl, reason);
+                certificateChangedPage_->showChange(serverUrl, reason, hadPinnedKey);
                 stack_->setCurrentWidget(certificateChangedPage_);
             });
 

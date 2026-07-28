@@ -50,11 +50,17 @@ TransportResult failure(HttpErrorKind kind, std::string detail) {
 
 // Legt eine vollständige Sitzung in Datei und Geheimnisspeicher ab, wie sie
 // nach einer echten Paarung dastünde.
-void storeSession(const std::string& jsonPath, FakeSecretStore& secrets) {
+//
+// Der Pin ist voreingestellt leer: gegen einen Server mit öffentlich
+// vertrauenswürdigem Zertifikat wird nichts bestätigt und nichts angeheftet,
+// und das ist der Normalfall, nicht die Ausnahme.
+void storeSession(const std::string& jsonPath,
+                  FakeSecretStore& secrets,
+                  const std::string& publicKeyPin = {}) {
     baludesk::core::Session session;
     session.serverUrl = "https://nas.example.com";
     session.username = "sven";
-    session.publicKeyPin.clear();
+    session.publicKeyPin = publicKeyPin;
     session.accessToken = "zugangstoken";
     session.refreshToken = "erneuerungstoken";
 
@@ -204,9 +210,26 @@ TEST(AuthBridgeTest, ReportsAChangedCertificate) {
     ASSERT_EQ(changed.count(), 1);
     EXPECT_EQ(changed.at(0).at(0).toString(), QStringLiteral("https://nas.example.com"));
     EXPECT_FALSE(changed.at(0).at(1).toString().isEmpty());
+    // Diese Sitzung hat keinen Pin: es wurde nie ein Zertifikat bestätigt.
+    // Die Seite muss das erfahren, sonst behauptet sie, der Server weise ein
+    // anderes vor als das bestätigte - und warnt vor einem Mithörer, wo bloss
+    // ein Zertifikat abgelaufen ist.
+    EXPECT_FALSE(changed.at(0).at(2).toBool());
     // Kein zweiter Aufruf: keine Erneuerung über eine Verbindung, der gerade
     // nicht zu trauen ist.
     EXPECT_EQ(f.transport->calls.size(), std::size_t{1});
+}
+
+TEST(AuthBridgeTest, SaysWhenAConfirmedKeyWasPinned) {
+    Fixture f;
+    storeSession(f.sessionPath(), *f.secrets, "sha256//abcdef==");
+    f.transport->queueResult(failure(HttpErrorKind::CertificatePinMismatch, "pinned key mismatch"));
+
+    QSignalSpy changed(f.bridge.get(), &AuthBridge::certificateChanged);
+    f.bridge->restoreSession();
+
+    ASSERT_EQ(changed.count(), 1);
+    EXPECT_TRUE(changed.at(0).at(2).toBool());
 }
 
 TEST(AuthBridgeTest, LogoutClearsTheSessionAndSaysSo) {
