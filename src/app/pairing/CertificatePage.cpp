@@ -33,14 +33,14 @@ CertificatePage::CertificatePage(QWidget* parent) : QWidget(parent) {
     // Zum Kopieren, damit der Vergleich nicht abgetippt werden muss.
     fingerprint_->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
-    auto* reject = new QPushButton(tr("Abbrechen"), this);
-    auto* confirm = new QPushButton(tr("Vertrauen und fortfahren"), this);
-    confirm->setDefault(true);
+    reject_ = new QPushButton(tr("Abbrechen"), this);
+    confirm_ = new QPushButton(tr("Vertrauen und fortfahren"), this);
+    confirm_->setDefault(true);
 
     auto* buttons = new QHBoxLayout;
     buttons->addStretch(1);
-    buttons->addWidget(reject);
-    buttons->addWidget(confirm);
+    buttons->addWidget(reject_);
+    buttons->addWidget(confirm_);
 
     auto* layout = new QVBoxLayout(this);
     layout->addStretch(1);
@@ -55,13 +55,40 @@ CertificatePage::CertificatePage(QWidget* parent) : QWidget(parent) {
     layout->addLayout(buttons);
     layout->addStretch(2);
 
-    connect(confirm, &QPushButton::clicked, this, &CertificatePage::confirmed);
-    connect(reject, &QPushButton::clicked, this, &CertificatePage::rejected);
+    connect(confirm_, &QPushButton::clicked, this, &CertificatePage::requestConfirm);
+    connect(reject_, &QPushButton::clicked, this, &CertificatePage::requestReject);
+}
+
+void CertificatePage::requestConfirm() {
+    // Sperren, bevor das Signal die Warteschlange des Arbeiterthreads
+    // erreicht: dort blockiert confirmCertificate() bis zu 30 Sekunden, und
+    // ein zweiter Klick liefe in derselben Warteschlange hinterher. Er
+    // erzeugte einen zweiten Gerätecode und verbrauchte die Grenze von drei
+    // Anfragen je Minute - also genau das, was den Nutzer aussperrt.
+    setBusy(true);
+    emit confirmed();
+}
+
+void CertificatePage::requestReject() {
+    // Auch der Abbruch sperrt beide Knöpfe. Eine Entscheidung ist gefallen;
+    // die zweite käme in einem Vorgang an, den es nicht mehr gibt.
+    setBusy(true);
+    emit rejected();
 }
 
 void CertificatePage::showCertificate(const QString& fingerprint, const QString& reason) {
+    // Die Seite gehört sich selbst: sie wird nur über diesen Weg gezeigt,
+    // also entsperrt sie hier auch selbst, statt sich auf den Aufrufer zu
+    // verlassen.
+    setBusy(false);
     reason_->setText(tr("Grund: %1").arg(reason));
     fingerprint_->setText(fingerprint);
+}
+
+void CertificatePage::setBusy(bool busy) {
+    confirm_->setEnabled(!busy);
+    confirm_->setText(busy ? tr("Wird geprüft…") : tr("Vertrauen und fortfahren"));
+    reject_->setEnabled(!busy);
 }
 
 }  // namespace baludesk::app

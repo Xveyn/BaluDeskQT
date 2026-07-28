@@ -60,6 +60,7 @@ add_executable(baludesk_app_tests
     app/settings_store_test.cpp
     app/qt_log_bridge_test.cpp
     app/countdown_test.cpp
+    app/certificate_page_test.cpp
     bridge/auth_bridge_test.cpp
 )
 

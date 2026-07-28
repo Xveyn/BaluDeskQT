@@ -2,7 +2,6 @@
 
 #include <gtest/gtest.h>
 
-#include <QCoreApplication>
 #include <QFile>
 #include <QSignalSpy>
 #include <QString>
@@ -14,6 +13,7 @@
 #include <string>
 #include <utility>
 
+#include "app/support/TestApplication.h"
 #include "core/api/HttpTypes.h"
 #include "core/auth/FileSessionRepository.h"
 #include "core/support/FakeSecretStore.h"
@@ -28,16 +28,10 @@ using baludesk::core::test::FakeTransport;
 namespace {
 
 // QObject und QTimer verlangen keine laufende Ereignisschleife, aber ohne eine
-// QCoreApplication-Instanz warnt Qt beim Anlegen eines Zeitgebers. Eine
-// einzige, statisch gehaltene Instanz für alle Tests - eine zweite anzulegen
-// wäre ein fataler Fehler in Qt.
-QCoreApplication& application() {
-    static int argc = 1;
-    static char argName[] = "baludesk_app_tests";
-    static char* argv[] = {argName, nullptr};
-    static QCoreApplication instance(argc, argv);
-    return instance;
-}
+// Anwendungsinstanz warnt Qt beim Anlegen eines Zeitgebers. Die Instanz ist
+// für alle Tests dieser ausführbaren Datei dieselbe - siehe
+// app/support/TestApplication.h.
+using baludesk::app::test::application;
 
 TransportResult jsonResult(long statusCode, std::string body) {
     TransportResult result;
